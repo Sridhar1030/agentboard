@@ -6,6 +6,10 @@ import { AgentCard } from "./AgentCard";
 interface KanbanBoardProps {
   agents: AgentInfo[];
   onSelect: (agentId: string) => void;
+  hasMore: boolean;
+  loadingMore: boolean;
+  onLoadMore: () => void;
+  total: number;
 }
 
 const columns = [
@@ -35,12 +39,15 @@ const columns = [
   },
 ];
 
-export function KanbanBoard({ agents, onSelect }: KanbanBoardProps) {
+export function KanbanBoard({ agents, onSelect, hasMore, loadingMore, onLoadMore, total }: KanbanBoardProps) {
+  const sortDesc = (arr: AgentInfo[]) =>
+    [...arr].sort((a, b) => b.lastModified - a.lastModified);
+
   const grouped: Record<string, AgentInfo[]> = {
-    active: agents.filter((a) => a.status === "active"),
-    recent: agents.filter((a) => a.status === "recent"),
-    idle: agents.filter((a) => a.status === "idle"),
-    old: agents.filter((a) => a.status === "old"),
+    active: sortDesc(agents.filter((a) => a.status === "active")),
+    recent: sortDesc(agents.filter((a) => a.status === "recent")),
+    idle: sortDesc(agents.filter((a) => a.status === "idle")),
+    old: sortDesc(agents.filter((a) => a.status === "old")),
   };
 
   if (agents.length === 0) {
@@ -102,6 +109,30 @@ export function KanbanBoard({ agents, onSelect }: KanbanBoardProps) {
           );
         })}
       </div>
+
+      {hasMore && (
+        <div className="flex items-center justify-center pt-4 pb-2">
+          <button
+            onClick={onLoadMore}
+            disabled={loadingMore}
+            className="flex items-center gap-2 px-5 py-2.5 bg-card border border-card-border rounded-lg text-sm font-medium hover:border-accent hover:text-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loadingMore ? (
+              <>
+                <div className="w-3.5 h-3.5 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                Loading...
+              </>
+            ) : (
+              <>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 5v14M5 12l7 7 7-7" />
+                </svg>
+                Load More ({agents.length} of {total})
+              </>
+            )}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

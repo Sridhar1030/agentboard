@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import type { AgentInfo, ConversationEntry } from "@/app/page";
 import { TraceView } from "@/components/TraceView";
 
@@ -12,17 +12,22 @@ interface AgentDetailPanelProps {
 interface AgentDetail {
   agent: AgentInfo;
   conversation: ConversationEntry[];
+  totalEntries: number;
+  hasMore: boolean;
 }
+
+const PAGE_SIZE = 50;
 
 export function AgentDetailPanel({ agentId, onClose }: AgentDetailPanelProps) {
   const [data, setData] = useState<AgentDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchDetail() {
       try {
-        const res = await fetch(`/api/agents/${agentId}`);
+        const res = await fetch(`/api/agents/${agentId}?offset=0&limit=${PAGE_SIZE}`);
         const json = await res.json();
         if (json.error) {
           setError(json.error);
@@ -37,6 +42,26 @@ export function AgentDetailPanel({ agentId, onClose }: AgentDetailPanelProps) {
     }
     fetchDetail();
   }, [agentId]);
+
+  const loadMore = useCallback(async () => {
+    if (!data || loadingMore || !data.hasMore) return;
+    setLoadingMore(true);
+    try {
+      const offset = data.conversation.length;
+      const res = await fetch(`/api/agents/${agentId}?offset=${offset}&limit=${PAGE_SIZE}`);
+      const json = await res.json();
+      if (!json.error) {
+        setData({
+          ...data,
+          conversation: [...data.conversation, ...json.conversation],
+          hasMore: json.hasMore,
+          totalEntries: json.totalEntries,
+        });
+      }
+    } catch {} finally {
+      setLoadingMore(false);
+    }
+  }, [agentId, data, loadingMore]);
 
   useEffect(() => {
     function handleEsc(e: KeyboardEvent) {
@@ -116,8 +141,31 @@ export function AgentDetailPanel({ agentId, onClose }: AgentDetailPanelProps) {
                 <div className="pt-2 -mx-1">
                   <TraceView
                     entries={data.conversation}
-                    caption={`First ${data.conversation.length} of ${data.agent.turns} transcript lines.`}
+                    caption={`Showing ${data.conversation.length} of ${data.totalEntries} entries (most recent first).`}
                   />
+                  {data.hasMore && (
+                    <div className="flex items-center justify-center pt-4 pb-2 pl-14">
+                      <button
+                        onClick={loadMore}
+                        disabled={loadingMore}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-card border border-card-border rounded-lg text-sm font-medium hover:border-accent hover:text-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {loadingMore ? (
+                          <>
+                            <div className="w-3.5 h-3.5 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                            Loading...
+                          </>
+                        ) : (
+                          <>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M12 5v14M5 12l7 7 7-7" />
+                            </svg>
+                            Load More ({data.conversation.length} of {data.totalEntries})
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="border border-dashed border-card-border rounded-xl p-8 text-center">

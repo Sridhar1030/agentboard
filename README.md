@@ -1,183 +1,173 @@
 # AgentBoard
 
-### The missing observability layer for AI coding agents.
+**A real-time analytics dashboard for AI coding sessions.**
 
 <p align="center">
   <img src="https://img.shields.io/badge/Next.js-16-black?logo=next.js" alt="Next.js 16" />
   <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react" alt="React 19" />
   <img src="https://img.shields.io/badge/Tailwind-v4-38BDF8?logo=tailwindcss" alt="Tailwind v4" />
-  <img src="https://img.shields.io/badge/MCP-Protocol-purple" alt="MCP" />
-  <img src="https://img.shields.io/badge/Cursor-SDK-00DC82" alt="Cursor SDK" />
+  <img src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript" alt="TypeScript" />
   <img src="https://img.shields.io/badge/License-MIT-green" alt="MIT" />
 </p>
 
 ---
 
-**AI agents write code. AgentBoard shows you *how they think*.**
+## What is this?
 
-When agents drive development, you lose visibility into the decision chain. Git blame tells you _what_ changed — not _why_ the agent chose that approach, what alternatives it considered, or which files it read before deciding. **AgentBoard** is the observability layer that captures reasoning traces, surfaces impact metrics, and makes AI-powered development auditable.
+AgentBoard gives you a unified view of everything your AI coding assistants are doing — across all projects, all sessions, all at once. Think of it as your **dev analytics dashboard**, but for AI-generated work.
+
+You open it, and instantly see:
+- Which sessions are running right now
+- What got built today vs. this week
+- How many lines were touched, files changed, context consumed
+- The full decision trail for any session (what it read, what it chose, what it modified)
+
+No more switching between chat windows to remember what happened. No more guessing which session introduced a bug.
 
 ---
 
-## The Problem
+## Quick Look
 
-| Today's Reality | What's Missing |
+| View | What you see |
 |---|---|
-| Git diffs show what changed | No record of why the agent chose that approach |
-| PR reviews see final output | No visibility into the reasoning chain |
-| Usage dashboards show token spend | No correlation between spend and code impact |
-| Agent sessions vanish after chat closes | No searchable history across projects |
+| **Kanban Board** | All sessions organized by recency — Active / Today / Week / Older |
+| **Session Detail** | Full conversation replay with tool calls, file touches, and reasoning |
+| **Trace Explorer** | Interactive decision graph, timeline, and file heatmap for traced sessions |
+| **Stats Banner** | Aggregate metrics — total sessions, lines touched, cost, context usage |
 
-**This is agentic amnesia.** AgentBoard fixes it.
+---
+
+## Getting Started
+
+```bash
+git clone https://github.com/Sridhar1030/agentboard.git
+cd agentboard
+npm install
+cp .env.example .env.local   # add your Cursor API key
+npm run dev                   # http://localhost:3000
+```
+
+That's it. The dashboard reads from Cursor's local state — no additional setup needed to see your sessions.
+
+---
+
+## Where does the data come from?
+
+AgentBoard reads from three local sources (nothing leaves your machine):
+
+| Source | What it provides |
+|---|---|
+| Cursor's internal SQLite DB | Session titles, lines changed, files touched, context usage, mode |
+| Transcript files (`.jsonl`) | Full conversation history with tool calls |
+| Trace files (`.cursor/traces/`) | Structured decision graphs (optional, from any MCP tracer) |
 
 ---
 
 ## Features
 
-### Unified Kanban Dashboard
-All Cursor agent sessions across every project in a single view:
+### Kanban View
+Sessions are categorized automatically by their last activity. Search across all sessions by title, project name, or mode. Toggle archived sessions. Pagination loads 50 at a time.
 
-- **Real-time columns** — Active / Today / This Week / Older
-- **Impact metrics** — Lines added/removed, files changed, context usage
-- **Search & filter** — Find any session by title, project, or mode
-- **Light & Dark themes** — Toggle with persistence
+### Session Detail Panel
+Click any session card → slide-out panel shows:
+- Impact metrics (lines +/-, files changed, context %)
+- Full conversation with most-recent-first ordering
+- Tool call badges (Read, Write, Shell, Grep, etc.)
+- File touch indicators (read vs. write)
+- Load More pagination for long conversations
 
-### Reasoning Traces
+### Trace Explorer (`/traces`)
+For sessions that produce structured traces, the explorer offers three visualization modes:
+- **Graph** — Decision DAG with expandable reasoning cards and SVG connectors
+- **Timeline** — Horizontal time-offset bars showing when each step occurred
+- **Files** — Heatmap showing which files were touched most (read/write/create breakdown)
 
-Each agent session produces a structured reasoning trace — a directed graph of decisions:
-
-```
-Session Start
-  └─ step_001 [decision]     "auth.py uses APIKeyAuth, need BearerToken..."
-       └─ step_002 [file_modify]  "Replacing APIKeyAuth class..."
-            └─ step_003 [file_modify]  "Updating imports in github.py..."
-```
-
-Traces capture:
-- **What** — decision / file_modify / tool_call / checkpoint
-- **Why** — natural-language reasoning for each step
-- **Files** — read, modified, created, or deleted
-- **Chain** — parent-child relationships between steps
-- **Cost** — model, token counts, USD spend per session
-
-### Session Detail View
-Click any card to see the full conversation trace:
-- Tool call visualization (file edits, shell commands, searches)
-- File touch indicators
-- Staggered animation timeline
-
-### Aggregate Stats Banner
-- Total sessions, lines touched, files changed
-- Traces captured, average context usage
-- Agent mode breakdown (Agent / Multitask / Chat)
+### Light & Dark Themes
+Toggle with persistence. Both themes designed for readability during long sessions.
 
 ---
 
-## Architecture
+## Project Structure
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                    AgentBoard UI                          │
-│         Next.js 16 + Tailwind v4 + React 19              │
-│  ┌────────┐  ┌────────┐  ┌────────┐  ┌────────┐        │
-│  │ Active │  │ Today  │  │  Week  │  │ Older  │        │
-│  └────────┘  └────────┘  └────────┘  └────────┘        │
-└────────────────────────┬─────────────────────────────────┘
-                         │
-            ┌────────────┼────────────┐
-            ▼            ▼            ▼
-  ┌──────────────┐ ┌──────────┐ ┌───────────────────┐
-  │ Cursor State │ │Transcript│ │ Session Tracer    │
-  │ SQLite DB    │ │  .jsonl  │ │ MCP Server        │
-  │ (titles,     │ │ files    │ │ (FastAPI + FastMCP)│
-  │  metadata)   │ │          │ │ Port 8080         │
-  └──────────────┘ └──────────┘ └───────────────────┘
+agentboard/
+├── src/
+│   ├── app/
+│   │   ├── page.tsx                 # Main Kanban dashboard
+│   │   ├── traces/page.tsx          # Trace Explorer
+│   │   └── api/
+│   │       ├── agents/route.ts      # Agent list (paginated)
+│   │       ├── agents/[agentId]/    # Agent detail + conversation
+│   │       └── traces/              # Trace sessions + detail
+│   ├── components/
+│   │   ├── KanbanBoard.tsx          # Column layout with pagination
+│   │   ├── AgentCard.tsx            # Individual session card
+│   │   ├── AgentDetailPanel.tsx     # Slide-out detail view
+│   │   ├── TraceView.tsx            # Conversation timeline renderer
+│   │   └── StatsBanner.tsx          # Aggregate metrics bar
+│   ├── lib/
+│   │   └── agents.ts               # Data layer (SQLite + transcripts)
+│   └── types/
+│       └── conversation.ts          # Shared TypeScript interfaces
+├── docs/                            # Documentation & pitch materials
+├── .cursor/
+│   ├── mcp.json                     # MCP server config
+│   ├── rules/session_trace.mdc      # Auto-tracing rule
+│   └── traces/                      # Stored trace files (local)
+└── .env.example
 ```
 
 ---
 
-## Quick Start
+## How is this different from cursor-session-tracer?
 
-```bash
-# Clone
-git clone https://github.com/Sridhar1030/agentboard.git
-cd agentboard
-
-# Install & run
-npm install
-cp .env.example .env.local   # Add your CURSOR_API_KEY
-npm run dev                   # → http://localhost:3000
-```
-
-### Enable Reasoning Traces (Optional)
-
-AgentBoard integrates with [cursor-session-tracer](https://github.com/indranildchandra/cursor-session-tracer) for MCP-based reasoning capture:
-
-```bash
-# In a separate terminal
-git clone https://github.com/indranildchandra/cursor-session-tracer.git
-cd cursor-session-tracer
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn src.app:app --host 127.0.0.1 --port 8080
-```
-
-The `.cursor/mcp.json` auto-registers the tracer. Future agent sessions produce traces stored in `.cursor/traces/`.
-
----
-
-## Tech Stack
-
-| Layer | Technology | Purpose |
+| | cursor-session-tracer | AgentBoard |
 |---|---|---|
-| Frontend | Next.js 16, React 19, Tailwind v4 | Server components, streaming UI |
-| Agent Metadata | SQLite introspection (`state.vscdb`) | Real titles, impact metrics — no heuristics |
-| Transcripts | JSONL parsing | Full conversation history with tool calls |
-| Tracing | cursor-session-tracer (FastAPI + FastMCP) | MCP-based reasoning chain capture |
-| Protocol | Model Context Protocol (MCP) | Standard AI tool integration |
-| SDK | @cursor/sdk | Programmatic agent operations |
+| **What** | MCP server that captures traces | Dashboard that visualizes everything |
+| **Language** | Python (FastAPI) | TypeScript (Next.js) |
+| **Output** | JSON trace files + CLI renderer | Interactive web UI with analytics |
+| **Data sources** | Only its own traces | Cursor DB + Transcripts + Traces |
+| **Focus** | Capture & storage | Visualization & insights |
+
+AgentBoard can consume traces from *any* MCP-compatible tracer. The `cursor-session-tracer` is one option — you could write your own, or use a different one entirely.
 
 ---
 
-## Trace Storage
+## Configuration
 
-Traces are stored locally:
+### Environment Variables
 
 ```
-.cursor/traces/
-└── YYYYMMDD/
-    └── <session-id>/
-        └── HHMMSS_<slug>.json
+CURSOR_API_KEY=crsr_your_key_here   # Optional: for SDK-based features
 ```
 
-Each trace file contains the full reasoning chain, file touches, model info, token counts, and cost estimates.
+### Connecting a Trace Server (Optional)
+
+If you want structured decision graphs in the Trace Explorer, run any MCP tracer that exposes an SSE endpoint:
+
+```json
+// .cursor/mcp.json
+{
+  "mcpServers": {
+    "your-tracer": {
+      "url": "http://127.0.0.1:8080/sse"
+    }
+  }
+}
+```
 
 ---
 
-## Why This Matters
+## Built With
 
-| Scenario | Without AgentBoard | With AgentBoard |
-|---|---|---|
-| Reviewing agent-generated PR | Stare at 40 changed files | Walk the reasoning trace step-by-step |
-| Agent broke something 2 days ago | Binary search through git | Search by date, find which session touched that file |
-| Measuring AI adoption | Anecdotal | Concrete: lines written, files changed, sessions/week |
-| Budget planning | "We spend $X on AI" | Per-session cost with model/token breakdown |
-| Team onboarding | "Just look at the code" | Browse sessions by project with full context |
-
----
-
-## Key Insight
-
-> The same way **OpenTelemetry** brought observability to microservices, we need an observability layer for AI agents. AgentBoard is that layer for AI-powered development.
-
-This isn't monitoring — it's making agent work **auditable, reviewable, and measurable**.
+- [Next.js 16](https://nextjs.org/) — React framework with server components
+- [React 19](https://react.dev/) — UI library
+- [Tailwind CSS v4](https://tailwindcss.com/) — Utility-first styling
+- [@cursor/sdk](https://cursor.com/docs/sdk/typescript) — Programmatic agent access
+- [Model Context Protocol](https://modelcontextprotocol.io/) — Standard for AI tool integration
 
 ---
 
 ## License
 
 MIT
-
----
-
-<p align="center"><i>Built with Cursor SDK, Model Context Protocol, and cursor-session-tracer.</i></p>

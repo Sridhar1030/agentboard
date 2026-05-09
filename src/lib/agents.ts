@@ -290,9 +290,14 @@ function collectFileTouches(
   return [...map.entries()].map(([path, op]) => ({ path, op }));
 }
 
-export async function getAgentDetail(agentId: string): Promise<{
+export async function getAgentDetail(
+  agentId: string,
+  options?: { offset?: number; limit?: number }
+): Promise<{
   agent: AgentData;
   conversation: ConversationEntry[];
+  totalEntries: number;
+  hasMore: boolean;
 } | null> {
   const agents = await getAllAgents();
   const agent = agents.find((a) => a.id === agentId);
@@ -300,9 +305,8 @@ export async function getAgentDetail(agentId: string): Promise<{
 
   const conversation: ConversationEntry[] = [];
 
-  // Find the transcript
   const transcript = transcriptCache.get(agentId);
-  if (!transcript) return { agent, conversation };
+  if (!transcript) return { agent, conversation, totalEntries: 0, hasMore: false };
 
   const jsonlPath = join(
     PROJECTS_DIR,
@@ -312,11 +316,19 @@ export async function getAgentDetail(agentId: string): Promise<{
     `${agentId}.jsonl`
   );
 
+  const offset = options?.offset ?? 0;
+  const limit = options?.limit ?? 50;
+
   try {
     const content = await readFile(jsonlPath, "utf-8");
     const lines = content.split("\n").filter(Boolean);
+    const totalLines = lines.length;
 
-    for (const line of lines.slice(0, 50)) {
+    // Reverse: most recent entries first
+    const reversed = [...lines].reverse();
+    const page = reversed.slice(offset, offset + limit);
+
+    for (const line of page) {
       try {
         const entry = JSON.parse(line);
         const role = entry.role as string;
@@ -345,9 +357,11 @@ export async function getAgentDetail(agentId: string): Promise<{
         }
       } catch {}
     }
+
+    return { agent, conversation, totalEntries: totalLines, hasMore: offset + limit < totalLines };
   } catch {}
 
-  return { agent, conversation };
+  return { agent, conversation, totalEntries: 0, hasMore: false };
 }
 
 export type { ConversationEntry, ConversationToolCall } from "@/types/conversation";

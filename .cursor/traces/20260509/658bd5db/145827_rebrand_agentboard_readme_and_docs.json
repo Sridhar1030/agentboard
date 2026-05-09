@@ -1,0 +1,25 @@
+{
+  "session": {
+    "session_id": "658bd5db",
+    "slug": "rebrand_agentboard_readme_and_docs",
+    "task": "Rebrand AgentBoard README and docs to be distinctly different from cursor-session-tracer",
+    "started_at": "2026-05-09T14:58:27Z",
+    "ended_at": null,
+    "outcome": null,
+    "repo_snapshot": [
+      "README.md",
+      "docs/USE_CASES.md",
+      "docs/SLACK_PITCH.md",
+      "docs/ROADMAP.md",
+      "docs/ARCHITECTURE.md"
+    ],
+    "cursor_stats": {
+      "model": null,
+      "tool_call_count": 0,
+      "tokens_in": null,
+      "tokens_out": null,
+      "cost_usd": null
+    }
+  },
+  "events": []
+}

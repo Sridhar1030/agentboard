@@ -91,7 +91,7 @@ export function TraceView({ entries, caption }: TraceViewProps) {
             Reasoning trace
           </h4>
           <p className="mt-1 text-[11px] text-muted leading-relaxed max-w-[18rem] sm:max-w-none">
-            Conversation flow — each card is one transcript row: prompts, reasoning
+            Most recent activity first — each card is one transcript row: prompts, reasoning
             excerpts, tooling, and file touches.
             {caption ? (
               <>

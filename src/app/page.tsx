@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import { KanbanBoard } from "@/components/KanbanBoard";
 import { AgentDetailPanel } from "@/components/AgentDetailPanel";
 import { StatsBanner } from "@/components/StatsBanner";
@@ -32,9 +33,14 @@ export type {
   FileTouch,
 } from "@/types/conversation";
 
+const PAGE_SIZE = 50;
+
 export default function Home() {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [total, setTotal] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -61,22 +67,40 @@ export default function Home() {
     localStorage.setItem("agentboard-theme", next);
   }
 
-  const fetchAgents = useCallback(async () => {
+  const fetchAgents = useCallback(async (reset = true) => {
     try {
-      const res = await fetch("/api/agents");
+      const res = await fetch(`/api/agents?offset=0&limit=${PAGE_SIZE}`);
       const data = await res.json();
       if (data.error) {
         setError(data.error);
       } else {
         setAgents(data.agents);
+        setHasMore(data.hasMore);
+        setTotal(data.total);
         setError(null);
       }
     } catch (err: any) {
       setError(err.message);
     } finally {
-      setLoading(false);
+      if (reset) setLoading(false);
     }
   }, []);
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const res = await fetch(`/api/agents?offset=${agents.length}&limit=${PAGE_SIZE}`);
+      const data = await res.json();
+      if (!data.error) {
+        setAgents((prev) => [...prev, ...data.agents]);
+        setHasMore(data.hasMore);
+        setTotal(data.total);
+      }
+    } catch {} finally {
+      setLoadingMore(false);
+    }
+  }, [agents.length, hasMore, loadingMore]);
 
   const fetchTraces = useCallback(async () => {
     try {
@@ -105,7 +129,7 @@ export default function Home() {
   });
 
   const counts = {
-    total: agents.filter((a) => !a.isArchived).length,
+    total: total || agents.filter((a) => !a.isArchived).length,
     active: agents.filter((a) => a.status === "active" && !a.isArchived).length,
     recent: agents.filter((a) => a.status === "recent" && !a.isArchived).length,
     idle: agents.filter((a) => a.status === "idle" && !a.isArchived).length,
@@ -132,6 +156,20 @@ export default function Home() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          <Link
+            href="/traces"
+            className="flex items-center gap-1.5 text-xs text-muted hover:text-accent transition-colors px-3 py-2 rounded-lg hover:bg-card border border-transparent hover:border-card-border"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+            </svg>
+            Traces
+            {traceCount > 0 && (
+              <span className="ml-1 px-1.5 py-0.5 rounded-full bg-accent/15 text-accent text-[10px] font-semibold">
+                {traceCount}
+              </span>
+            )}
+          </Link>
           <button
             onClick={toggleTheme}
             className="text-muted hover:text-foreground transition-colors p-2 rounded-lg hover:bg-card"
@@ -205,7 +243,14 @@ export default function Home() {
             </div>
           </div>
         ) : (
-          <KanbanBoard agents={filtered} onSelect={setSelectedAgent} />
+          <KanbanBoard
+            agents={filtered}
+            onSelect={setSelectedAgent}
+            hasMore={hasMore}
+            loadingMore={loadingMore}
+            onLoadMore={loadMore}
+            total={total}
+          />
         )}
       </div>
 
