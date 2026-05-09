@@ -1,4 +1,4 @@
-import { readdir, readFile } from "fs/promises";
+import { readdir, readFile, stat } from "fs/promises";
 import { execSync } from "child_process";
 import { join } from "path";
 import type {
@@ -282,6 +282,52 @@ function collectFileTouches(
   }
   if (map.size === 0) return undefined;
   return [...map.entries()].map(([path, op]) => ({ path, op }));
+}
+
+/** Full raw transcript for server-side analysis (e.g. Prompt Coach). Chronological line order. */
+export async function readAgentTranscript(agentId: string): Promise<string | null> {
+  await buildTranscriptCache();
+  const transcript = transcriptCache.get(agentId);
+  if (!transcript) return null;
+
+  const jsonlPath = join(
+    PROJECTS_DIR,
+    transcript.projectPath,
+    "agent-transcripts",
+    agentId,
+    `${agentId}.jsonl`
+  );
+
+  try {
+    return await readFile(jsonlPath, "utf-8");
+  } catch {
+    return null;
+  }
+}
+
+/** Filesystem metadata for the agent JSONL transcript (cache invalidation). */
+export async function getAgentTranscriptFileStat(agentId: string): Promise<{
+  path: string;
+  mtimeMs: number;
+  size: number;
+} | null> {
+  await buildTranscriptCache();
+  const transcript = transcriptCache.get(agentId);
+  if (!transcript) return null;
+
+  const jsonlPath = join(
+    PROJECTS_DIR,
+    transcript.projectPath,
+    "agent-transcripts",
+    agentId,
+    `${agentId}.jsonl`
+  );
+  try {
+    const s = await stat(jsonlPath);
+    return { path: jsonlPath, mtimeMs: s.mtimeMs, size: s.size };
+  } catch {
+    return null;
+  }
 }
 
 export async function getAgentDetail(

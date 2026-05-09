@@ -57,9 +57,27 @@ You instantly understand the *why* behind every change.
 
 ---
 
+### 5. "Are my prompts any good?"
+
+**Scenario:** You run agents daily but output quality feels random — unclear instructions, long back-and-forth, or repeated corrections after the model misunderstood.
+
+**Without AgentBoard:** You rely on gut feel or re-read long threads manually.
+
+**With AgentBoard — Prompt Coach** (`/agent/[id]` → **Coach** tab):
+- **Letter grade (A–D)** from transcript structure (productive vs. wasted turns, verbosity patterns).
+- A concise **summary** of how the conversation *actually* went vs. what you intended.
+- An **ideal prompt** — a single tight instruction you could have used to reduce churn.
+- **Correction moments** when you had to steer the agent back on track (pattern detection).
+
+Optional **Cursor SDK** pass refines the narrative when `CURSOR_API_KEY` is set; **disk caching** means you are not re-charged for the same transcript on every refresh.
+
+**Outcome:** You improve *how* you drive the agent — the highest-leverage habit change for AI-assisted development.
+
+---
+
 ## For Tech Leads / Managers
 
-### 5. Measuring AI Adoption Impact
+### 6. Measuring AI Adoption Impact
 
 **Scenario:** Leadership asks "How much value are we getting from AI coding tools?"
 
@@ -73,7 +91,7 @@ You instantly understand the *why* behind every change.
 
 ---
 
-### 6. Code Review of Agent-Generated PRs
+### 7. Code Review of Agent-Generated PRs
 
 **Scenario:** A PR shows 600 lines changed across 12 files. It was agent-generated.
 
@@ -89,7 +107,7 @@ Review time drops from 45 minutes to 10 minutes.
 
 ---
 
-### 7. Onboarding New Team Members
+### 8. Onboarding New Team Members
 
 **Scenario:** New hire needs to understand how a complex feature was built.
 
@@ -101,7 +119,7 @@ Review time drops from 45 minutes to 10 minutes.
 
 ## For Platform / DevEx Teams
 
-### 8. Understanding Agent Patterns Across the Org
+### 9. Understanding Agent Patterns Across the Org
 
 **Scenario:** DevEx team wants to improve developer productivity with AI tools.
 
@@ -113,7 +131,7 @@ Review time drops from 45 minutes to 10 minutes.
 
 ---
 
-### 9. Debugging MCP Tool Integrations
+### 10. Debugging MCP Tool Integrations
 
 **Scenario:** A custom MCP tool isn't working as expected during agent sessions.
 
@@ -123,7 +141,7 @@ Review time drops from 45 minutes to 10 minutes.
 
 ## For Compliance / Security
 
-### 10. Audit Trail for AI-Generated Code
+### 11. Audit Trail for AI-Generated Code
 
 **Scenario:** Regulated industry requires traceability for code changes.
 
@@ -144,6 +162,7 @@ This creates a defensible record of AI-assisted development.
 
 | Use Case | Persona | Key Benefit |
 |---|---|---|
+| Prompt quality (Prompt Coach) | Developer | Grade + ideal prompt + correction patterns; fewer wasted turns |
 | DAG reasoning debug | Developer | See decision order and branches, not only the diff |
 | Understand agent changes | Developer | Save 30+ min of manual investigation |
 | Find regression source | Developer | Pinpoint exact session that broke things |

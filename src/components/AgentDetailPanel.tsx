@@ -4,30 +4,14 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import type { AgentInfo, ConversationEntry } from "@/app/page";
 import { TraceView } from "@/components/TraceView";
-import { TraceDagSvg } from "@/components/TraceDagSvg";
+import { parseTraceInstant, traceRelatesToAgent, type TraceSessionRow } from "@/lib/agentTraceMatch";
 
 interface AgentDetailPanelProps {
   agentId: string;
   onClose: () => void;
 }
 
-interface TraceSession {
-  session_id: string;
-  slug: string;
-  task: string;
-  started_at: string;
-  ended_at: string;
-  outcome: string;
-  event_count: number;
-  cursor_stats: {
-    model: string | null;
-    tool_call_count: number;
-    tokens_in: number | null;
-    tokens_out: number | null;
-    cost_usd: number | null;
-  };
-  file: string;
-}
+type TraceSession = TraceSessionRow;
 
 interface AgentDetail {
   agent: AgentInfo;
@@ -38,59 +22,6 @@ interface AgentDetail {
 
 const PAGE_SIZE = 50;
 
-function parseTraceInstant(iso: string): Date {
-  if (!iso) return new Date(NaN);
-  const t = iso.trim();
-  if (/^\d+$/.test(t)) {
-    const n = parseInt(t, 10);
-    return new Date(n < 1e12 ? n * 1000 : n);
-  }
-  if (/Z$|[+-]\d{2}:?\d{2}$/.test(t)) return new Date(t);
-  const withZ = t.includes("T") && !/[zZ]|[+-]\d{2}:?\d{2}$/.test(t) ? `${t}Z` : t;
-  return new Date(withZ);
-}
-
-function traceRelatesToAgent(trace: TraceSession, agent: AgentInfo): boolean {
-  const t0 = parseTraceInstant(trace.started_at).getTime();
-  const t1Raw = parseTraceInstant(trace.ended_at).getTime();
-  const t1 = Number.isNaN(t1Raw) ? t0 + 60_000 : Math.max(t1Raw, t0 + 1_000);
-
-  const a0 = agent.createdAt;
-  const a1 = Math.max(agent.lastModified, a0 + 1_000);
-
-  if (Number.isNaN(t0)) return false;
-  const timeOverlap = t0 < a1 && t1 > a0;
-
-  const file = (trace.file || "").toLowerCase();
-  const task = (trace.task || "").toLowerCase();
-  const ws = (agent.workspace || agent.projectPath || "").toLowerCase();
-  const folder = ws.split("/").filter(Boolean).pop() || "";
-  const projSlug = agent.project.toLowerCase().replace(/\s+/g, "").replace(/[^a-z0-9]/g, "");
-  const projHyphen = agent.project.toLowerCase().replace(/\s+/g, "-");
-
-  const pathMatch =
-    folder.length >= 2 &&
-    (file.includes(folder.toLowerCase()) ||
-      file.includes(projHyphen) ||
-      (projSlug.length >= 3 && file.includes(projSlug)) ||
-      (ws.length > 2 && file.includes(ws.replace(/^\/users\/[^/]+/i, ""))));
-
-  const name = agent.name.trim().toLowerCase();
-  const titleMatch =
-    name.length >= 4 &&
-    (task.includes(name.slice(0, Math.min(52, name.length))) ||
-      name
-        .split(/\s+/)
-        .filter((w) => w.length > 3)
-        .some((w) => task.includes(w)));
-
-  const taskMatchesProject =
-    projSlug.length >= 3 &&
-    (task.includes(agent.project.toLowerCase()) || task.replace(/\s/g, "").includes(projSlug));
-
-  return timeOverlap && (pathMatch || titleMatch || taskMatchesProject);
-}
-
 export function AgentDetailPanel({ agentId, onClose }: AgentDetailPanelProps) {
   const [data, setData] = useState<AgentDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -99,12 +30,6 @@ export function AgentDetailPanel({ agentId, onClose }: AgentDetailPanelProps) {
   const [panelTab, setPanelTab] = useState<"transcript" | "traces">("transcript");
   const [traceSessions, setTraceSessions] = useState<TraceSession[]>([]);
   const [tracesLoading, setTracesLoading] = useState(false);
-  const [dagSessionId, setDagSessionId] = useState<string | null>(null);
-  const [dagEvents, setDagEvents] = useState<
-    { step_id: string; parent_step_id: string | null; type: string; timestamp: string; reason: string; files_read: string[]; files_modified: string[]; files_created: string[]; files_deleted: string[]; notes?: string }[]
-  >([]);
-  const [dagDetailLoading, setDagDetailLoading] = useState(false);
-  const [dagStepFocus, setDagStepFocus] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchDetail() {
@@ -126,12 +51,7 @@ export function AgentDetailPanel({ agentId, onClose }: AgentDetailPanelProps) {
   }, [agentId]);
 
   useEffect(() => {
-    queueMicrotask(() => {
-      setDagSessionId(null);
-      setDagEvents([]);
-      setDagStepFocus(null);
-      setPanelTab("transcript");
-    });
+    queueMicrotask(() => setPanelTab("transcript"));
   }, [agentId]);
 
   useEffect(() => {
@@ -149,30 +69,6 @@ export function AgentDetailPanel({ agentId, onClose }: AgentDetailPanelProps) {
       .filter((t) => traceRelatesToAgent(t, data.agent))
       .sort((a, b) => parseTraceInstant(b.started_at).getTime() - parseTraceInstant(a.started_at).getTime());
   }, [data, traceSessions]);
-
-  const toggleDagPreview = useCallback(
-    async (sessionId: string) => {
-      if (dagSessionId === sessionId) {
-        setDagSessionId(null);
-        setDagEvents([]);
-        setDagStepFocus(null);
-        return;
-      }
-      setDagDetailLoading(true);
-      setDagStepFocus(null);
-      try {
-        const res = await fetch(`/api/traces/${sessionId}`);
-        const d = await res.json();
-        if (!d.error && d.events) {
-          setDagSessionId(sessionId);
-          setDagEvents(d.events);
-        }
-      } finally {
-        setDagDetailLoading(false);
-      }
-    },
-    [dagSessionId]
-  );
 
   const loadMore = useCallback(async () => {
     if (!data || loadingMore || !data.hasMore) return;
@@ -206,8 +102,16 @@ export function AgentDetailPanel({ agentId, onClose }: AgentDetailPanelProps) {
     <div className="fixed inset-0 z-50 flex">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className="relative ml-auto w-full max-w-3xl bg-background border-l border-card-border h-full overflow-y-auto">
-        <div className="sticky top-0 bg-background/95 backdrop-blur-sm border-b border-card-border px-6 py-4 flex items-center justify-between z-10">
-          <h2 className="text-base font-semibold truncate">Agent Details</h2>
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-card-border bg-background/95 px-6 py-4 backdrop-blur-sm">
+          <div className="flex min-w-0 flex-1 items-center gap-3 pr-2">
+            <h2 className="truncate text-base font-semibold">Agent Details</h2>
+            <Link
+              href={`/agent/${agentId}`}
+              className="shrink-0 rounded-lg border border-accent/40 bg-accent/10 px-2.5 py-1 text-[11px] font-semibold text-accent transition hover:bg-accent/20"
+            >
+              Full page →
+            </Link>
+          </div>
           <button
             onClick={onClose}
             className="text-muted hover:text-foreground transition-colors p-1.5 rounded-lg hover:bg-card"
@@ -336,8 +240,8 @@ export function AgentDetailPanel({ agentId, onClose }: AgentDetailPanelProps) {
 
               {panelTab === "traces" && (
                 <div className="space-y-3 pt-1">
-                  <p className="text-xs text-muted leading-relaxed">
-                    Session traces that overlap this agent in time and match this workspace or task title. Open the full explorer or preview the DAG inline.
+                  <p className="text-xs leading-relaxed text-muted">
+                    Session traces aligned with this agent in time and workspace. Use the full page for a large DAG and file roll-up — or open in Trace Explorer.
                   </p>
                   {tracesLoading ? (
                     <div className="flex justify-center py-8">
@@ -370,32 +274,20 @@ export function AgentDetailPanel({ agentId, onClose }: AgentDetailPanelProps) {
                               </time>
                             </div>
                             <div className="flex flex-wrap gap-2 shrink-0">
-                              <button
-                                type="button"
-                                onClick={() => toggleDagPreview(t.session_id)}
-                                disabled={dagDetailLoading}
-                                className="px-3 py-1.5 rounded-lg border border-card-border text-xs font-medium hover:border-accent hover:text-accent transition-colors disabled:opacity-50"
+                              <Link
+                                href={`/agent/${agentId}?tab=dag&session=${encodeURIComponent(t.session_id)}`}
+                                className="rounded-lg border border-card-border px-3 py-1.5 text-xs font-medium transition-colors hover:border-accent hover:text-accent"
                               >
-                                {dagSessionId === t.session_id ? "Hide DAG" : "Preview DAG"}
-                              </button>
+                                DAG (full page)
+                              </Link>
                               <Link
                                 href={`/traces?session=${encodeURIComponent(t.session_id)}`}
-                                className="px-3 py-1.5 rounded-lg bg-accent text-white text-xs font-medium hover:opacity-90 transition-opacity"
+                                className="rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90"
                               >
                                 Open in traces
                               </Link>
                             </div>
                           </div>
-                          {dagSessionId === t.session_id && dagEvents.length > 0 && (
-                            <div className="border-t border-card-border max-h-[min(480px,70vh)] overflow-y-auto">
-                              <TraceDagSvg
-                                events={dagEvents}
-                                sessionId={t.session_id}
-                                expandedStep={dagStepFocus}
-                                onToggle={setDagStepFocus}
-                              />
-                            </div>
-                          )}
                         </li>
                       ))}
                     </ul>

@@ -37,6 +37,10 @@ yarn-error.log*
 # tracer venv
 .venv/
 
+# local MCP / Prompt Coach artifacts (never commit)
+.cursor/coach-cache/
+.cursor/traces/
+
 # vercel
 .vercel
 

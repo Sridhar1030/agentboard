@@ -6,6 +6,8 @@ interface TraceViewProps {
   entries: ConversationEntry[];
   /** Shown in the subtitle (e.g. how many transcript lines sampled) */
   caption?: string;
+  /** Comfortable spacing and full message text (full-page agent view). */
+  density?: "compact" | "comfortable";
 }
 
 function fileBasename(full: string): string {
@@ -74,7 +76,9 @@ function RailDot({
   );
 }
 
-export function TraceView({ entries, caption }: TraceViewProps) {
+export function TraceView({ entries, caption, density = "compact" }: TraceViewProps) {
+  const spacious = density === "comfortable";
+
   if (entries.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-card-border bg-card/40 px-4 py-12 text-center text-xs text-muted">
@@ -84,15 +88,20 @@ export function TraceView({ entries, caption }: TraceViewProps) {
   }
 
   return (
-    <div className="relative pl-1" role="list" aria-label="Agent reasoning trace">
-      <header className="mb-6 flex flex-col gap-0.5 pl-14 pr-1 sm:pl-14 sm:pr-4 sm:flex-row sm:items-end sm:justify-between">
+    <div className={`relative pl-1 ${spacious ? "pl-0" : ""}`} role="list" aria-label="Agent reasoning trace">
+      <header
+        className={`flex flex-col gap-0.5 pr-1 sm:flex-row sm:items-end sm:justify-between ${spacious ? "mb-8 pl-2 pr-2 sm:pl-4 sm:pr-4" : "mb-6 pl-14 sm:pl-14 sm:pr-4"}`}
+      >
         <div>
-          <h4 className="text-sm font-semibold tracking-tight text-foreground">
-            Reasoning trace
+          <h4 className={`font-semibold tracking-tight text-foreground ${spacious ? "text-base" : "text-sm"}`}>
+            {spacious ? "Activity" : "Reasoning trace"}
           </h4>
-          <p className="mt-1 text-[11px] text-muted leading-relaxed max-w-[18rem] sm:max-w-none">
-            Most recent activity first — each card is one transcript row: prompts, reasoning
-            excerpts, tooling, and file touches.
+          <p
+            className={`mt-1 text-muted leading-relaxed ${spacious ? "max-w-2xl text-xs" : "text-[11px] max-w-[18rem] sm:max-w-none"}`}
+          >
+            {spacious
+              ? "Most recent first — prompts, reasoning, tooling, and file touches."
+              : "Most recent activity first — each card is one transcript row: prompts, reasoning excerpts, tooling, and file touches."}
             {caption ? (
               <>
                 {" "}
@@ -101,18 +110,20 @@ export function TraceView({ entries, caption }: TraceViewProps) {
             ) : null}
           </p>
         </div>
-        <div className="mt-3 sm:mt-0 rounded-md border border-card-border bg-background/70 px-2.5 py-1 font-mono text-[10px] text-muted uppercase tracking-widest tabular-nums">
+        <div
+          className={`mt-3 rounded-md border border-card-border bg-background/70 px-2.5 py-1 font-mono text-muted uppercase tracking-widest tabular-nums sm:mt-0 ${spacious ? "text-[11px]" : "text-[10px]"}`}
+        >
           {entries.length} step{entries.length === 1 ? "" : "s"}
         </div>
       </header>
 
       <div className="relative">
         <div
-          className="absolute left-[17px] top-4 bottom-4 w-px bg-gradient-to-b from-card-border via-card-border/70 to-transparent"
+          className={`absolute w-px bg-gradient-to-b from-card-border via-card-border/70 to-transparent ${spacious ? "left-[21px] top-6 bottom-6" : "left-[17px] top-4 bottom-4"}`}
           aria-hidden
         />
 
-        <ul className="relative space-y-0">
+        <ul className={`relative space-y-0 ${spacious ? "space-y-1" : ""}`}>
           {entries.map((entry, idx) => {
             const stepNo = idx + 1;
             const isUser = entry.role === "user";
@@ -126,15 +137,17 @@ export function TraceView({ entries, caption }: TraceViewProps) {
             return (
               <li
                 key={idx}
-                className={`trace-step-enter relative flex gap-3 pb-10 last:pb-2`}
+                className={`trace-step-enter relative flex gap-3 ${spacious ? "gap-4 pb-12 last:pb-4" : "pb-10 last:pb-2"}`}
                 style={{ animationDelay: `${idx * 48}ms` }}
                 role="listitem"
               >
-                <div className="flex shrink-0 flex-col items-center">
+                <div className={`flex shrink-0 flex-col items-center ${spacious ? "pt-0.5" : ""}`}>
                   <RailDot variant={railVariant} />
                 </div>
 
-                <article className="trace-card-glow min-w-0 flex-1 rounded-xl border border-card-border bg-card shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] backdrop-blur-sm overflow-hidden">
+                <article
+                  className={`trace-card-glow min-w-0 flex-1 rounded-xl border border-card-border bg-card shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] backdrop-blur-sm overflow-hidden ${spacious ? "ring-1 ring-white/[0.02]" : ""}`}
+                >
                   <div
                     className={`flex flex-wrap items-center gap-2 border-b border-card-border/80 px-3.5 py-2 ${isUser ? "bg-accent/[0.06]" : "bg-background/45"}`}
                   >
@@ -166,9 +179,11 @@ export function TraceView({ entries, caption }: TraceViewProps) {
                     )}
                   </div>
 
-                  <div className="space-y-3 px-3.5 py-3">
+                  <div className={`space-y-3 px-3.5 py-3 ${spacious ? "px-4 py-4 sm:px-5 sm:py-5" : ""}`}>
                     {hasText && (
-                      <p className="line-clamp-3 text-[13px] leading-relaxed text-foreground/90">
+                      <p
+                        className={`text-[13px] leading-relaxed text-foreground/90 ${spacious ? "text-[14px] leading-[1.65] sm:text-[15px]" : "line-clamp-3"}`}
+                      >
                         {entry.content}
                       </p>
                     )}

@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { KanbanBoard } from "@/components/KanbanBoard";
-import { AgentDetailPanel } from "@/components/AgentDetailPanel";
 import { StatsBanner } from "@/components/StatsBanner";
 
 export interface AgentInfo {
@@ -36,13 +36,13 @@ export type {
 const PAGE_SIZE = 50;
 
 export default function Home() {
+  const router = useRouter();
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [total, setTotal] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const [traceCount, setTraceCount] = useState(0);
@@ -277,7 +277,7 @@ export default function Home() {
         ) : (
           <KanbanBoard
             agents={filtered}
-            onSelect={setSelectedAgent}
+            onSelect={(id) => router.push(`/agent/${id}`)}
             hasMore={hasMore}
             loadingMore={loadingMore}
             onLoadMore={loadMore}
@@ -285,13 +285,6 @@ export default function Home() {
           />
         )}
       </div>
-
-      {selectedAgent && (
-        <AgentDetailPanel
-          agentId={selectedAgent}
-          onClose={() => setSelectedAgent(null)}
-        />
-      )}
     </main>
   );
 }

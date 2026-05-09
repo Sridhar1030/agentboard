@@ -186,10 +186,10 @@ export default function TracesPage() {
         </aside>
 
         {/* Main trace visualization area */}
-        <section className="flex-1 min-h-0 overflow-y-auto p-6">
+        <section className="flex min-h-0 flex-1 flex-col overflow-hidden p-6">
           {loadingDetail ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+            <div className="flex flex-1 items-center justify-center">
+              <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent border-t-transparent" />
             </div>
           ) : selectedTrace ? (
             <TraceDetailView trace={selectedTrace} />
@@ -220,9 +220,9 @@ function TraceDetailView({ trace }: { trace: TraceDetail }) {
   const duration = getDuration(trace.session.started_at, trace.session.ended_at);
 
   return (
-    <div className="space-y-6 slide-up">
+    <div className="slide-up flex min-h-0 flex-1 flex-col gap-6 overflow-hidden">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex shrink-0 flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-xl font-semibold leading-snug">{trace.session.task}</h2>
           <div className="flex items-center gap-3 mt-2 text-sm text-muted">
@@ -252,7 +252,7 @@ function TraceDetailView({ trace }: { trace: TraceDetail }) {
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-5">
         <MiniStat label="Steps" value={trace.events.length.toString()} />
         <MiniStat label="Files Scope" value={trace.session.repo_snapshot.length.toString()} />
         <MiniStat label="Tool Calls" value={(trace.session.cursor_stats.tool_call_count || 0).toString()} />
@@ -271,18 +271,29 @@ function TraceDetailView({ trace }: { trace: TraceDetail }) {
       </div>
 
       {/* View modes */}
+      <div className="flex min-h-0 flex-1 flex-col gap-4">
       {viewMode === "dag" && (
-        <TraceDagSvg
-          events={trace.events}
-          sessionId={trace.session.session_id}
-          expandedStep={expandedStep}
-          onToggle={setExpandedStep}
-        />
+        <div className="flex min-h-[min(620px,calc(100dvh-16rem))] flex-1 flex-col">
+          <TraceDagSvg
+            className="min-h-[500px] flex-1"
+            events={trace.events}
+            sessionId={trace.session.session_id}
+            expandedStep={expandedStep}
+            onToggle={setExpandedStep}
+          />
+        </div>
       )}
       {viewMode === "timeline" && (
-        <TimelineView events={trace.events} expandedStep={expandedStep} onToggle={setExpandedStep} />
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <TimelineView events={trace.events} expandedStep={expandedStep} onToggle={setExpandedStep} />
+        </div>
       )}
-      {viewMode === "files" && <FileHeatmap files={allFiles} />}
+      {viewMode === "files" && (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <FileHeatmap files={allFiles} />
+        </div>
+      )}
+      </div>
     </div>
   );
 }

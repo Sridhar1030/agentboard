@@ -1,99 +1,105 @@
 # Architecture Overview
 
-## System Design
+## System design
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                          AgentBoard UI                                │
-│                  Next.js 16 + React 19 + Tailwind v4                 │
-│                                                                       │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐            │
-│  │  Active  │  │  Today   │  │  Week    │  │  Older   │  Kanban    │
-│  │  column  │  │  column  │  │  column  │  │  column  │  Board     │
-│  └──────────┘  └──────────┘  └──────────┘  └──────────┘            │
-│                                                                       │
-│  ┌────────────────────────────────────────────────────────┐          │
-│  │  Trace Explorer (/traces)                               │          │
-│  │  • Decision Graph (DAG visualization)                   │          │
-│  │  • Timeline View (time-offset bars)                     │          │
-│  │  • File Heatmap (read/write/create breakdown)           │          │
-│  └────────────────────────────────────────────────────────┘          │
-└──────────────────────────────────┬───────────────────────────────────┘
-                                   │
-                    ┌──────────────┼──────────────┐
-                    │              │              │
-                    ▼              ▼              ▼
-         ┌──────────────┐  ┌───────────┐  ┌──────────────────┐
-         │ Cursor Global │  │ Transcript│  │ Session Tracer   │
-         │ State DB      │  │  .jsonl   │  │ MCP Server       │
-         │               │  │  files    │  │                  │
-         │ state.vscdb   │  │           │  │ FastAPI + FastMCP │
-         │ (SQLite)      │  │ per-agent │  │ Port 8080        │
-         └──────────────┘  └───────────┘  └──────────────────┘
-               │                │                │
-               ▼                ▼                ▼
-        ┌────────────┐  ┌────────────┐  ┌─────────────────┐
-        │ Composer    │  │ Full chat  │  │ .cursor/traces/ │
-        │ Headers     │  │ history    │  │ (JSON files)    │
-        │ (metadata)  │  │ (content)  │  │                 │
-        └────────────┘  └────────────┘  └─────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         AgentBoard (Next.js 16 + React 19 + Tailwind v4)   │
+│                                                                              │
+│  Home `/` — Kanban + StatsBanner (sessions, lines, files, mode breakdown)  │
+│  + workspace filter · pagination · theme (localStorage)                     │
+│                                                                              │
+│  `/agent/[id]` — Full session page                                          │
+│  • Activity (transcript / tool trace)                                       │
+│  • Reasoning DAG — TraceDagSvg (SVG, zoom, animated edges, hover cards)      │
+│  • Files tab                                                                 │
+│  • Prompt Coach — grade, ideal prompt, tips, correction moments              │
+│                                                                              │
+│  `/insights` — Cross-session analytics (hotspots, co-mod pairs, timeline)  │
+│  `/traces`   — Trace Explorer (MRF list, independent sidebar scroll, DAG)    │
+└────────────────────────────────┬────────────────────────────────────────────┘
+                                 │
+              ┌──────────────────┼──────────────────┐
+              ▼                  ▼                  ▼
+   ┌──────────────────┐  ┌──────────────┐  ┌───────────────────────┐
+   │ Cursor global    │  │ Transcripts  │  │ MCP session tracer    │
+   │ state (SQLite)   │  │ `.jsonl`     │  │ → `.cursor/traces/`   │
+   └──────────────────┘  └──────────────┘  └───────────────────────┘
+              │                  │                  │
+              ▼                  ▼                  ▼
+       Composer headers    Chat + tools      DAG events + workspace tag
 ```
 
-## Data Sources
+## Data sources
 
 ### 1. Cursor Global State DB (`state.vscdb`)
 
-**Path:** `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`
+**Path:** `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb` (macOS)
 
-SQLite database maintained by Cursor IDE. We query the `composer.composerHeaders` key from `ItemTable` which contains:
+SQLite; we read `composer.composerHeaders` from `ItemTable` for:
 
-- `composerId` — Unique session identifier
-- `name` — User-visible session title
-- `lastUpdatedAt` / `createdAt` — Timestamps
-- `totalLinesAdded` / `totalLinesRemoved` — Code impact
-- `filesChangedCount` — Breadth of changes
-- `contextUsagePercent` — How much context budget was consumed
+- `composerId`, `name`, `lastUpdatedAt`, `createdAt`
+- `totalLinesAdded` / `totalLinesRemoved`, `filesChangedCount`, `contextUsagePercent`
 - `unifiedMode` — Agent / Multitask / Chat
-- `isArchived` — Whether user archived the session
-- `workspaceIdentifier` — Which project it belongs to
+- `isArchived`, `workspaceIdentifier`
 
 ### 2. Agent Transcripts (`.jsonl`)
 
 **Path:** `~/.cursor/projects/<project-hash>/agent-transcripts/<agent-id>/<agent-id>.jsonl`
 
-One line per conversation turn. Each line is JSON containing:
-- `role` — "user" or "assistant"
-- `message.content[]` — Array of blocks (text, tool_use)
+Used for conversation replay, file touch extraction, and **Prompt Coach** input.
 
-We parse these to extract:
-- Conversation text (cleaned of XML tags)
-- Tool calls (name + arguments)
-- File touches (which files were read/written)
-- Timestamps (from embedded `<timestamp>` tags)
+### 3. Session traces (`.cursor/traces/`)
 
-### 3. Session Traces (`.cursor/traces/`)
+**Path:** `.cursor/traces/YYYYMMDD/<session-id>/…json`
 
-**Path:** `.cursor/traces/YYYYMMDD/<session-id>/HHMMSS_<slug>.json`
+Emitted by MCP tracers (e.g. **cursor-session-tracer**). Events form a **DAG** via `parent_step_id`. When the tracer’s **start_trace** includes a **workspace** root, traces can be matched to the correct Cursor project in **`agentTraceMatch`** (title overlap, timing windows, workspace path).
 
-Generated by the `cursor-session-tracer` MCP server during agent tasks. Contains:
-- Session metadata (task, outcome, model, tokens, cost)
-- Ordered list of events forming a decision graph
-- Each event: type, reason, files_read, files_modified, parent_step_id
+## Frontend components (selected)
 
-## API Routes
+| Component | Role |
+|-----------|------|
+| `TraceDagSvg` | Renders trace steps as an **SVG** graph: layout, **animated** edges between parent/child steps, **pan/zoom**, expandable nodes, **hover** detail. Shared by `/agent/[id]` and `/traces`. |
+| `StatsBanner` | Aggregate metrics: session counts, lines touched, files changed, **mode** distribution. |
+| Kanban stack | Column layout, cards, **pagination**, **workspace** filter, theme toggle. |
+
+## Prompt Coach pipeline
+
+```
+Transcript .jsonl
+      │
+      ▼
+analyzeTranscriptHeuristic()     ← fast local pass (grade, turns, patterns, ideal prompt shell)
+      │
+      ▼ (optional, if CURSOR_API_KEY)
+enrichWithSdkCoach()           ← @cursor/sdk: tighter narrative + coaching JSON
+      │
+      ▼
+GET /api/agents/[id]/coach
+      │
+      ├── Disk cache: `.cursor/coach-cache/<agentId>.json`
+      │   Invalidated when transcript mtime + size change (or `?force=true`)
+      └── Returns CoachApiResponse (grade, summary, idealPrompt, tips, correctionMoments, …)
+```
+
+**Design goals:** default path works offline; SDK adds quality when configured; **caching** avoids duplicate token spend for unchanged transcripts.
+
+## API routes
 
 | Route | Method | Purpose |
-|---|---|---|
-| `/api/agents` | GET | List agents with pagination (`?offset=0&limit=50`) |
-| `/api/agents/[agentId]` | GET | Agent detail + conversation (`?offset=0&limit=50`) |
-| `/api/traces` | GET | List all trace sessions (proxied from tracer) |
-| `/api/traces/[sessionId]` | GET | Full trace detail with events |
+|-------|--------|---------|
+| `/api/agents` | GET | Paginated agent list (`offset`, `limit`) |
+| `/api/agents/[agentId]` | GET | Agent metadata + conversation slice |
+| `/api/agents/[agentId]/coach` | GET | Prompt Coach analysis (`?force=true` bypasses cache) |
+| `/api/traces` | GET | Trace session index |
+| `/api/traces/[sessionId]` | GET | Trace detail + events for DAG |
+| `/api/insights` | GET | Cross-session aggregates for `/insights` |
 
-## Key Design Decisions
+## Key design decisions
 
-1. **Local-only, no auth** — Reads directly from Cursor's local state. No network calls to Cursor's servers.
-2. **Server Components for data** — API routes run server-side where filesystem access is available.
-3. **Pagination everywhere** — Both agent list and conversation detail support offset/limit to handle 300+ entry transcripts.
-4. **Reversed conversation order** — Most recent transcript entries shown first (latest activity at top).
-5. **Explicit column sorting** — Each Kanban column independently sorts by `lastModified` descending, even after pagination appends older items.
-6. **MCP for tracing** — Uses the standard Model Context Protocol so any MCP-compatible agent can produce traces.
+1. **Local-first** — Primary reads are filesystem + SQLite; no cloud requirement.
+2. **Pagination** — Agent list and transcripts use offset/limit for large histories.
+3. **Transcript order** — UI emphasizes **recent** activity (most-recent-first where applicable).
+4. **Trace ↔ agent matching** — **`agentTraceMatch`** uses time windows, title/token overlap, and **workspace** fields from trace metadata to link Kanban sessions to MCP traces.
+5. **MCP for tracing** — Standard protocol; workspace-tagged **start_trace** improves match quality.
+6. **Coach caching** — File-backed cache keyed on transcript stat so development and repeated views stay cheap.

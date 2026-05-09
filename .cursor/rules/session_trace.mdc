@@ -8,6 +8,8 @@ alwaysApply: true
 
 When performing a multi-file task (touching 2+ files), use the `cursor-session-tracer` MCP tools:
 
+When calling **start_trace**, always include the workspace path (the root folder of the current project) as the `workspace` parameter so traces can be matched to the correct project without path heuristics.
+
 1. **start_trace** — Call at the beginning with a task description and list of files in scope. Store the returned `session_id`.
 2. **append_trace** — Call before each significant decision (reading a file to understand structure, choosing an implementation approach, modifying a dependent file). Pass the previous `step_id` as `parent_step_id`.
 3. **end_trace** — Call when the task is complete or you are stopping. Pass outcome as `completed`, `partial`, or `aborted`.

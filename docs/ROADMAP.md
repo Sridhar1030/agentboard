@@ -1,6 +1,17 @@
 # AgentBoard — Product Roadmap
 
-## What's Next
+## Recently shipped
+
+These are in the product today:
+
+| Capability | Notes |
+|---|---|
+| **Prompt Coach** | Grades prompts (A–D), suggests an **ideal prompt**, surfaces **correction patterns**, and combines **fast heuristics** with optional **Cursor SDK** narrative refinement. **Disk cache** (keyed on transcript mtime/size) avoids repeat API spend on unchanged sessions. |
+| **Workspace-aware session tracing** | MCP **start_trace** accepts a **workspace** root path; trace JSON carries that field so AgentBoard can match traces to the correct Cursor project instead of guessing from titles alone. |
+| **Full agent page** (`/agent/[id]`) | Dedicated session view with **activity**, **reasoning DAG** (`TraceDagSvg`), **files**, and **Prompt Coach** tabs. |
+| **Insights redesign** | Cross-session **directory hotspots**, **co-mod pairs**, **file activity timeline**, filtered by workspace and agent/trace context. |
+
+## What's next
 
 Ideas organized by impact and effort. Each tier builds on the previous.
 
@@ -41,10 +52,11 @@ Ideas organized by impact and effort. Each tier builds on the previous.
 
 ---
 
-#### Session Efficiency Scoring
-**What:** Compute quality and efficiency scores from trace data — branching depth, file churn, step density, and outcome-to-effort ratios.
-**How:** Aggregate MCP trace JSON (event DAG, `files_read` / `files_modified`, reasoning steps, `end_trace` stats) into per-session and roll-up scores.
-**Why it's exciting:** Compare runs objectively, spot wasted backtracking, and measure improvement without guessing from chat alone.
+#### Session Efficiency Scoring *(planned — next after Prompt Coach)*
+**What:** Quantitative **session quality** scores from trace + transcript signals — branching depth, file churn, step density, outcome-to-effort ratios, alignment with Prompt Coach grades.
+**How:** Aggregate MCP trace JSON (event DAG, `files_read` / `files_modified`, reasoning steps, `end_trace` stats) and optional coach outputs into **per-session** and **rollup** scores in the UI.
+**Why it's exciting:** Objectively compare runs, spot wasted backtracking, and show improvement over time — extending what Prompt Coach explains qualitatively into **metrics**.
+**Relationship:** Prompt Coach (shipped) already surfaces **productive vs. wasted turns** and **grades**; efficiency scoring generalizes that into dashboard-level KPIs.
 
 ---
 
