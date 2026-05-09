@@ -41,6 +41,13 @@ Ideas organized by impact and effort. Each tier builds on the previous.
 
 ---
 
+#### Session Efficiency Scoring
+**What:** Compute quality and efficiency scores from trace data — branching depth, file churn, step density, and outcome-to-effort ratios.
+**How:** Aggregate MCP trace JSON (event DAG, `files_read` / `files_modified`, reasoning steps, `end_trace` stats) into per-session and roll-up scores.
+**Why it's exciting:** Compare runs objectively, spot wasted backtracking, and measure improvement without guessing from chat alone.
+
+---
+
 ### Tier 2: High Impact, Medium Effort
 
 #### 6. Team Aggregation (Multi-User)
@@ -124,6 +131,7 @@ Ideas organized by impact and effort. Each tier builds on the previous.
 | Cost Intelligence | High | Low | P0 |
 | Agent Diff View | High | Medium | P1 |
 | Trace-Aware Search | High | Medium | P1 |
+| Session Efficiency Scoring | High | Medium | P1 |
 | PR Integration (GH Action) | High | Medium | P1 |
 | Team Aggregation | Very High | Medium | P1 |
 | Anomaly Detection | Medium | Medium | P2 |

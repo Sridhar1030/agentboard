@@ -32,8 +32,8 @@ No more switching between chat windows to remember what happened. No more guessi
 |---|---|
 | **Kanban Board** | All sessions organized by recency — Active / Today / Week / Older |
 | **Session Detail** | Full conversation replay with tool calls, file touches, and reasoning |
-| **Trace Explorer** | Interactive decision graph, timeline, and file heatmap for traced sessions |
-| **Stats Banner** | Aggregate metrics — total sessions, lines touched, cost, context usage |
+| **Trace Explorer** | DAG trace visualization, timeline, file heatmap, and deep-links for traced sessions |
+| **Insights** | Cross-session file intelligence (treemap, co-mod pairs, timeline), filters by workspace/agent trace |
 
 ---
 
@@ -75,12 +75,18 @@ Click any session card → slide-out panel shows:
 - Tool call badges (Read, Write, Shell, Grep, etc.)
 - File touch indicators (read vs. write)
 - Load More pagination for long conversations
+- **Chat ↔ trace linking** — Related MCP sessions appear in a Traces tab; open a match to preview the decision DAG inline or jump to the full Trace Explorer for that session
 
 ### Trace Explorer (`/traces`)
 For sessions that produce structured traces, the explorer offers three visualization modes:
-- **Graph** — Decision DAG with expandable reasoning cards and SVG connectors
+- **DAG** — Decision graph rendered as an SVG DAG (nodes = steps, edges = parent/child); pan/zoom-friendly layout for following branches
 - **Timeline** — Horizontal time-offset bars showing when each step occurred
 - **Files** — Heatmap showing which files were touched most (read/write/create breakdown)
+
+The list sorts by recency, shows consistent timestamps, and uses a scrollable sidebar so long session lists stay usable next to the detail pane.
+
+### Insights (`/insights`)
+Cross-session analytics scoped by **workspace** and optional **trace session** filters: file intelligence (directory treemap, top co-modification pairs, activity timeline grid), project ranking, and highest-impact sessions — replacing the older force-layout graph with more stable visuals.
 
 ### Light & Dark Themes
 Toggle with persistence. Both themes designed for readability during long sessions.
@@ -102,7 +108,8 @@ agentboard/
 │   ├── components/
 │   │   ├── KanbanBoard.tsx          # Column layout with pagination
 │   │   ├── AgentCard.tsx            # Individual session card
-│   │   ├── AgentDetailPanel.tsx     # Slide-out detail view
+│   │   ├── AgentDetailPanel.tsx     # Slide-out detail view + trace links
+│   │   ├── TraceDagSvg.tsx          # DAG visualization for trace steps
 │   │   ├── TraceView.tsx            # Conversation timeline renderer
 │   │   └── StatsBanner.tsx          # Aggregate metrics bar
 │   ├── lib/

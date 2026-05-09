@@ -52,8 +52,10 @@ export default function Home() {
   useEffect(() => {
     const saved = localStorage.getItem("agentboard-theme");
     if (saved === "light") {
-      setTheme("light");
-      document.documentElement.classList.add("light");
+      queueMicrotask(() => {
+        setTheme("light");
+        document.documentElement.classList.add("light");
+      });
     }
   }, []);
 
@@ -80,8 +82,8 @@ export default function Home() {
         setTotal(data.total);
         setError(null);
       }
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       if (reset) setLoading(false);
     }
@@ -112,9 +114,14 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    fetchAgents();
-    fetchTraces();
-    const interval = setInterval(() => { fetchAgents(); fetchTraces(); }, 10000);
+    queueMicrotask(() => {
+      void fetchAgents();
+      void fetchTraces();
+    });
+    const interval = setInterval(() => {
+      void fetchAgents();
+      void fetchTraces();
+    }, 10000);
     return () => clearInterval(interval);
   }, [fetchAgents, fetchTraces]);
 
@@ -237,7 +244,7 @@ export default function Home() {
             />
           </div>
           <button
-            onClick={fetchAgents}
+            onClick={() => fetchAgents()}
             className="text-muted hover:text-foreground transition-colors p-2 rounded-lg hover:bg-card"
             title="Refresh"
           >

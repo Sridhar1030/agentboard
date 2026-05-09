@@ -1,4 +1,4 @@
-import { readdir, stat, readFile } from "fs/promises";
+import { readdir, readFile } from "fs/promises";
 import { execSync } from "child_process";
 import { join } from "path";
 import type {
@@ -57,18 +57,12 @@ function getStatus(lastModified: number): AgentData["status"] {
   return "old";
 }
 
-function cleanProjectName(name: string): string {
-  return name
-    .replace(/^Users-srpillai-/, "")
-    .replace(/^CODING-/, "")
-    .replace(/-/g, " ");
-}
-
-function extractWorkspaceName(workspace: any): { project: string; projectPath: string; workspacePath: string } {
-  if (!workspace?.uri?.path) {
+function extractWorkspaceName(workspace: unknown): { project: string; projectPath: string; workspacePath: string } {
+  const w = workspace as { uri?: { path?: string } } | null | undefined;
+  if (!w?.uri?.path) {
     return { project: "Unknown", projectPath: "", workspacePath: "" };
   }
-  const wsPath = workspace.uri.path as string;
+  const wsPath = w.uri.path;
   const parts = wsPath.split("/");
   const folderName = parts[parts.length - 1] || parts[parts.length - 2] || "Unknown";
   return {
@@ -93,7 +87,7 @@ interface ComposerHeader {
   subtitle?: string;
   isArchived?: boolean;
   numSubComposers?: number;
-  workspaceIdentifier?: any;
+  workspaceIdentifier?: unknown;
 }
 
 function queryComposerHeaders(): ComposerHeader[] {
@@ -114,7 +108,7 @@ function findTranscriptInfo(composerId: string): { projectPath: string; turns: n
   return transcriptCache.get(composerId) || null;
 }
 
-let transcriptCache = new Map<string, { projectPath: string; turns: number }>();
+const transcriptCache = new Map<string, { projectPath: string; turns: number }>();
 let transcriptCacheBuilt = false;
 
 async function buildTranscriptCache() {
@@ -203,7 +197,7 @@ const DETAIL_TRUNC = 140;
 const HOME = process.env.HOME || "";
 
 function compactPath(absPath: string, max = DETAIL_TRUNC): string {
-  let p =
+  const p =
     HOME && absPath.startsWith(HOME) ? "~" + absPath.slice(HOME.length) : absPath;
   if (p.length <= max) return p;
   return "…" + p.slice(-(max - 1));

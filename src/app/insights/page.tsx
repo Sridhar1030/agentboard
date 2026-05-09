@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 
 interface FileNode {
@@ -10,10 +10,6 @@ interface FileNode {
   reads: number;
   writes: number;
   sessions: number;
-  x?: number;
-  y?: number;
-  vx?: number;
-  vy?: number;
 }
 
 interface FileEdge {
@@ -42,44 +38,149 @@ interface HotSession {
 
 interface InsightsData {
   graph: { nodes: FileNode[]; edges: FileEdge[] };
+  fileIntelligence?: {
+    byDirectory: DirectoryGroup[];
+    topPairs: CoModificationPair[];
+    maxPairWeight: number;
+    fileActivityTimeline: FileActivityTimeline;
+    traceSessionCount: number;
+  };
   topProjects: TopProject[];
   hottestSessions: HotSession[];
   totals: { totalSessions: number; totalLines: number; totalFiles: number; avgContext: number };
+  traceSessions?: { session_id: string; task: string; started_at?: string }[];
+  filter?: { workspace: string | null; session: string | null };
+}
+
+interface DirectoryGroup {
+  dir: string;
+  totalTouches: number;
+  fileCount: number;
+  files: FileNode[];
+}
+
+interface CoModificationPair {
+  a: string;
+  b: string;
+  aName: string;
+  bName: string;
+  weight: number;
+}
+
+interface FileActivityTimeline {
+  sessions: { id: string; label: string; started_at: string }[];
+  rows: {
+    fileId: string;
+    fileName: string;
+    reads: number;
+    writes: number;
+    touched: boolean[];
+  }[];
 }
 
 export default function InsightsPage() {
   const [data, setData] = useState<InsightsData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [hoveredNode, setHoveredNode] = useState<string | null>(null);
+  const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
+  const [workspace, setWorkspace] = useState("");
+  const [session, setSession] = useState("");
+  const [workspaceOptions, setWorkspaceOptions] = useState<string[]>([]);
 
   useEffect(() => {
-    fetch("/api/insights")
+    fetch("/api/agents?limit=500")
       .then((r) => r.json())
-      .then((d) => setData(d))
-      .finally(() => setLoading(false));
+      .then((d) => {
+        const agents = d.agents || [];
+        const projects = [...new Set(agents.map((a: { project: string }) => a.project))].sort() as string[];
+        setWorkspaceOptions(projects);
+      })
+      .catch(() => setWorkspaceOptions([]));
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (!cancelled) setLoading(true);
+    });
+    const q = new URLSearchParams();
+    if (workspace) q.set("workspace", workspace);
+    if (session) q.set("session", session);
+    const url = q.toString() ? `/api/insights?${q.toString()}` : "/api/insights";
+    fetch(url)
+      .then((r) => r.json())
+      .then((d) => {
+        if (!cancelled) setData(d);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspace, session]);
+
+  useEffect(() => {
+    if (!data?.traceSessions?.length || !session) return;
+    const stillThere = data.traceSessions.some((t) => t.session_id === session);
+    if (!stillThere) queueMicrotask(() => setSession(""));
+  }, [data?.traceSessions, session]);
 
   return (
     <main className="min-h-screen flex flex-col">
-      <header className="border-b border-card-border px-6 py-4 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-3">
-          <Link href="/" className="text-muted hover:text-foreground transition-colors">
+      <header className="border-b border-card-border px-6 py-4 flex items-center justify-between shrink-0 gap-4 flex-wrap">
+        <div className="flex items-center gap-3 min-w-0">
+          <Link href="/" className="text-muted hover:text-foreground transition-colors shrink-0">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M19 12H5M12 19l-7-7 7-7" />
             </svg>
           </Link>
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-accent to-purple-500 flex items-center justify-center">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-accent to-purple-500 flex items-center justify-center shrink-0">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-white">
               <circle cx="12" cy="12" r="3" />
               <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
             </svg>
           </div>
-          <div>
+          <div className="min-w-0">
             <h1 className="text-lg font-semibold tracking-tight">Insights</h1>
-            <p className="text-xs text-muted">Cross-session intelligence &amp; file relationship graph</p>
+            <p className="text-xs text-muted">Cross-session intelligence — where agents focus and what moves together</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          <label className="flex items-center gap-2 text-[11px] text-muted">
+            <span className="whitespace-nowrap">Workspace</span>
+            <select
+              value={workspace}
+              onChange={(e) => {
+                setWorkspace(e.target.value);
+                setSession("");
+              }}
+              className="bg-card border border-card-border rounded-lg px-2 py-1.5 text-xs text-foreground max-w-[200px]"
+            >
+              <option value="">All workspaces</option>
+              {workspaceOptions.map((w) => (
+                <option key={w} value={w}>
+                  {w}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-2 text-[11px] text-muted">
+            <span className="whitespace-nowrap">Trace session</span>
+            <select
+              value={session}
+              onChange={(e) => setSession(e.target.value)}
+              className="bg-card border border-card-border rounded-lg px-2 py-1.5 text-xs text-foreground max-w-[240px]"
+              title={data?.traceSessions?.find((t) => t.session_id === session)?.task}
+            >
+              <option value="">All sessions in scope</option>
+              {(data?.traceSessions || []).map((t) => (
+                <option key={t.session_id} value={t.session_id}>
+                  {(t.task || t.session_id).slice(0, 72)}
+                  {((t.task || t.session_id).length > 72 ? "…" : "")}
+                </option>
+              ))}
+            </select>
+          </label>
           <Link href="/traces" className="text-xs text-muted hover:text-accent transition-colors px-3 py-2 rounded-lg hover:bg-card">
             Traces
           </Link>
@@ -100,29 +201,31 @@ export default function InsightsPage() {
         <div className="flex-1 overflow-y-auto">
           {/* Summary cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-6 pb-0">
-            <SummaryCard label="Total Sessions" value={data.totals.totalSessions.toString()} sublabel="across all projects" gradient="from-accent/20 to-accent/5" />
+            <SummaryCard
+              label="Total Sessions"
+              value={data.totals.totalSessions.toString()}
+              sublabel={
+                session
+                  ? "selected trace session"
+                  : workspace
+                    ? `in “${workspace}”`
+                    : "across all projects"
+              }
+              gradient="from-accent/20 to-accent/5"
+            />
             <SummaryCard label="Lines Impacted" value={data.totals.totalLines > 1000 ? `${(data.totals.totalLines / 1000).toFixed(1)}k` : data.totals.totalLines.toString()} sublabel="added + removed" gradient="from-finished/20 to-finished/5" />
             <SummaryCard label="Files Touched" value={data.totals.totalFiles.toString()} sublabel="unique files modified" gradient="from-running/20 to-running/5" />
             <SummaryCard label="Avg Context" value={`${data.totals.avgContext.toFixed(0)}%`} sublabel="budget consumed/session" gradient="from-purple-500/20 to-purple-500/5" />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 p-6">
-            {/* File Relationship Graph */}
-            <div className="lg:col-span-2 bg-card border border-card-border rounded-xl overflow-hidden">
-              <div className="px-5 py-4 border-b border-card-border flex items-center justify-between">
-                <div>
-                  <h2 className="text-sm font-semibold">File Relationship Graph</h2>
-                  <p className="text-[11px] text-muted mt-0.5">Files modified together across sessions — thicker lines = stronger coupling</p>
-                </div>
-                <span className="text-[10px] text-muted bg-background px-2 py-1 rounded border border-card-border font-mono">
-                  {data.graph.nodes.length} files &middot; {data.graph.edges.length} links
-                </span>
-              </div>
-              <ForceGraph
-                nodes={data.graph.nodes}
-                edges={data.graph.edges}
-                hoveredNode={hoveredNode}
-                onHover={setHoveredNode}
+            {/* File intelligence (replaces force graph) */}
+            <div className="lg:col-span-2 space-y-4">
+              <FileIntelligencePanel
+                fi={data.fileIntelligence}
+                graphNodes={data.graph.nodes}
+                selectedFileId={selectedFileId}
+                onSelectFile={setSelectedFileId}
               />
             </div>
 
@@ -154,249 +257,339 @@ export default function InsightsPage() {
               </div>
             </div>
           </div>
-
-          {/* File Heatmap from graph */}
-          {data.graph.nodes.length > 0 && (
-            <div className="px-6 pb-6">
-              <div className="bg-card border border-card-border rounded-xl overflow-hidden">
-                <div className="px-5 py-4 border-b border-card-border">
-                  <h2 className="text-sm font-semibold">File Touch Frequency</h2>
-                  <p className="text-[11px] text-muted mt-0.5">Which files AI agents interact with most (from traced sessions)</p>
-                </div>
-                <div className="p-4">
-                  <div className="flex flex-wrap gap-2">
-                    {data.graph.nodes.slice(0, 30).map((node) => (
-                      <FileChip key={node.id} node={node} maxTouches={data.graph.nodes[0]?.touches || 1} />
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       ) : null}
     </main>
   );
 }
 
-function ForceGraph({
-  nodes,
-  edges,
-  hoveredNode,
-  onHover,
+function FileIntelligencePanel({
+  fi,
+  graphNodes,
+  selectedFileId,
+  onSelectFile,
 }: {
-  nodes: FileNode[];
-  edges: FileEdge[];
-  hoveredNode: string | null;
-  onHover: (id: string | null) => void;
+  fi: InsightsData["fileIntelligence"];
+  graphNodes: FileNode[];
+  selectedFileId: string | null;
+  onSelectFile: (id: string | null) => void;
 }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animRef = useRef<number>(0);
-  const nodesRef = useRef<FileNode[]>([]);
-  const [dimensions, setDimensions] = useState({ w: 800, h: 500 });
+  const maxTouchesGlobal = useMemo(() => Math.max(1, graphNodes[0]?.touches ?? 1), [graphNodes]);
 
-  const initNodes = useCallback(() => {
-    const w = dimensions.w;
-    const h = dimensions.h;
-    return nodes.map((n, i) => ({
-      ...n,
-      x: w / 2 + (Math.random() - 0.5) * w * 0.6,
-      y: h / 2 + (Math.random() - 0.5) * h * 0.6,
-      vx: 0,
-      vy: 0,
-    }));
-  }, [nodes, dimensions]);
+  if (!fi) {
+    return (
+      <div className="bg-card border border-card-border rounded-xl overflow-hidden p-8 text-center">
+        <p className="text-sm text-foreground/90">Insights response did not include file intelligence.</p>
+        <p className="text-xs text-muted mt-2">Hard-refresh the page — the API may have been updated since this tab loaded.</p>
+      </div>
+    );
+  }
 
-  useEffect(() => {
-    const container = canvasRef.current?.parentElement;
-    if (container) {
-      setDimensions({ w: container.clientWidth, h: 500 });
-    }
-  }, []);
-
-  useEffect(() => {
-    nodesRef.current = initNodes();
-    let frame = 0;
-    const maxFrames = 200;
-
-    const simulate = () => {
-      const ns = nodesRef.current;
-      const { w, h } = dimensions;
-
-      // Repulsion between nodes
-      for (let i = 0; i < ns.length; i++) {
-        for (let j = i + 1; j < ns.length; j++) {
-          const dx = ns[j].x! - ns[i].x!;
-          const dy = ns[j].y! - ns[i].y!;
-          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-          const force = 800 / (dist * dist);
-          const fx = (dx / dist) * force;
-          const fy = (dy / dist) * force;
-          ns[i].vx! -= fx;
-          ns[i].vy! -= fy;
-          ns[j].vx! += fx;
-          ns[j].vy! += fy;
-        }
-      }
-
-      // Attraction along edges
-      for (const edge of edges) {
-        const source = ns.find((n) => n.id === edge.source);
-        const target = ns.find((n) => n.id === edge.target);
-        if (!source || !target) continue;
-        const dx = target.x! - source.x!;
-        const dy = target.y! - source.y!;
-        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-        const force = dist * 0.005 * edge.weight;
-        const fx = (dx / dist) * force;
-        const fy = (dy / dist) * force;
-        source.vx! += fx;
-        source.vy! += fy;
-        target.vx! -= fx;
-        target.vy! -= fy;
-      }
-
-      // Center gravity
-      for (const n of ns) {
-        n.vx! += (w / 2 - n.x!) * 0.001;
-        n.vy! += (h / 2 - n.y!) * 0.001;
-      }
-
-      // Apply velocity with damping
-      const damping = 0.85;
-      for (const n of ns) {
-        n.vx! *= damping;
-        n.vy! *= damping;
-        n.x! += n.vx!;
-        n.y! += n.vy!;
-        n.x! = Math.max(30, Math.min(w - 30, n.x!));
-        n.y! = Math.max(30, Math.min(h - 30, n.y!));
-      }
-
-      draw();
-      frame++;
-      if (frame < maxFrames) {
-        animRef.current = requestAnimationFrame(simulate);
-      }
-    };
-
-    const draw = () => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-      const ns = nodesRef.current;
-
-      ctx.clearRect(0, 0, dimensions.w, dimensions.h);
-
-      // Draw edges
-      for (const edge of edges) {
-        const source = ns.find((n) => n.id === edge.source);
-        const target = ns.find((n) => n.id === edge.target);
-        if (!source || !target) continue;
-
-        const isHighlighted = hoveredNode === source.id || hoveredNode === target.id;
-        ctx.beginPath();
-        ctx.moveTo(source.x!, source.y!);
-        ctx.lineTo(target.x!, target.y!);
-        ctx.strokeStyle = isHighlighted ? "rgba(99, 102, 241, 0.6)" : "rgba(99, 102, 241, 0.15)";
-        ctx.lineWidth = Math.min(edge.weight * 1.5, 4);
-        ctx.stroke();
-      }
-
-      // Draw nodes
-      for (const n of ns) {
-        const isHovered = hoveredNode === n.id;
-        const radius = Math.max(4, Math.min(14, n.touches * 2.5));
-        const isConnected = hoveredNode
-          ? edges.some((e) => (e.source === hoveredNode && e.target === n.id) || (e.target === hoveredNode && e.source === n.id))
-          : false;
-
-        ctx.beginPath();
-        ctx.arc(n.x!, n.y!, radius, 0, Math.PI * 2);
-
-        if (isHovered) {
-          ctx.fillStyle = "rgba(99, 102, 241, 0.9)";
-          ctx.shadowColor = "rgba(99, 102, 241, 0.5)";
-          ctx.shadowBlur = 12;
-        } else if (isConnected) {
-          ctx.fillStyle = "rgba(99, 102, 241, 0.6)";
-          ctx.shadowBlur = 0;
-        } else if (n.writes > n.reads) {
-          ctx.fillStyle = hoveredNode ? "rgba(245, 158, 11, 0.2)" : "rgba(245, 158, 11, 0.6)";
-          ctx.shadowBlur = 0;
-        } else {
-          ctx.fillStyle = hoveredNode ? "rgba(16, 185, 129, 0.2)" : "rgba(16, 185, 129, 0.5)";
-          ctx.shadowBlur = 0;
-        }
-        ctx.fill();
-        ctx.shadowBlur = 0;
-
-        // Label for larger nodes or hovered
-        if (radius > 6 || isHovered || isConnected) {
-          ctx.font = `${isHovered ? "bold " : ""}10px monospace`;
-          ctx.fillStyle = isHovered || isConnected ? "rgba(228, 228, 231, 0.95)" : "rgba(228, 228, 231, 0.55)";
-          ctx.textAlign = "center";
-          ctx.fillText(n.name, n.x!, n.y! + radius + 12);
-        }
-      }
-    };
-
-    simulate();
-    return () => cancelAnimationFrame(animRef.current);
-  }, [nodes, edges, dimensions, hoveredNode, initNodes]);
-
-  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-
-    const ns = nodesRef.current;
-    let found: string | null = null;
-    for (const n of ns) {
-      const dx = mx - n.x!;
-      const dy = my - n.y!;
-      const r = Math.max(4, Math.min(14, n.touches * 2.5)) + 4;
-      if (dx * dx + dy * dy < r * r) {
-        found = n.id;
-        break;
-      }
-    }
-    onHover(found);
-  }, [onHover]);
+  if (fi.byDirectory.length === 0 && fi.topPairs.length === 0 && fi.fileActivityTimeline.rows.length === 0) {
+    return (
+      <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+        <div className="px-5 py-4 border-b border-card-border">
+          <h2 className="text-sm font-semibold">Where agents focus in the repo</h2>
+          <p className="text-[11px] text-muted mt-0.5">
+            Hotspots, files edited together, and activity across recent trace sessions — no physics, no guesswork.
+          </p>
+        </div>
+        <div className="p-8 text-center">
+          <p className="text-sm text-foreground/90 mb-2">No file-level trace data in this scope yet</p>
+          <p className="text-xs text-muted max-w-lg mx-auto leading-relaxed">
+            When Cursor session traces record files read or modified, this panel fills automatically. Try widening the workspace filter or capturing a new traced session.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="relative">
-      <canvas
-        ref={canvasRef}
-        width={dimensions.w}
-        height={500}
-        className="w-full h-[500px] cursor-crosshair"
-        onMouseMove={handleMouseMove}
-        onMouseLeave={() => onHover(null)}
-      />
-      {hoveredNode && (
-        <div className="absolute top-4 right-4 bg-background/95 border border-card-border rounded-lg p-3 text-xs shadow-lg backdrop-blur-sm">
-          <div className="font-mono font-semibold text-foreground">{hoveredNode}</div>
-          {(() => {
-            const node = nodes.find((n) => n.id === hoveredNode);
-            if (!node) return null;
-            return (
-              <div className="mt-1.5 space-y-0.5 text-muted">
-                <div><span className="text-emerald-400">{node.reads}</span> reads &middot; <span className="text-running">{node.writes}</span> writes</div>
-                <div>{node.sessions} session{node.sessions !== 1 ? "s" : ""}</div>
-              </div>
-            );
-          })()}
+    <div className="bg-card border border-card-border rounded-xl overflow-hidden shadow-sm shadow-black/20">
+      <div className="px-5 py-4 border-b border-card-border flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold">Where agents focus in the repo</h2>
+          <p className="text-[11px] text-muted mt-1 max-w-2xl leading-relaxed">
+            <span className="text-foreground/80">Tiles</span> size with touch volume — color shows read vs write bias.
+            <span className="mx-1.5 text-card-border">|</span>
+            <span className="text-foreground/80">Pairs</span> are files often touched in the same trace session (coupling).
+            <span className="mx-1.5 text-card-border">|</span>
+            <span className="text-foreground/80">Timeline</span> is chronological: which files showed up in which sessions.
+          </p>
         </div>
-      )}
-      {/* Legend */}
-      <div className="absolute bottom-4 left-4 flex gap-4 text-[10px] text-muted">
-        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500/60" /> Read-heavy</span>
-        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-running/60" /> Write-heavy</span>
-        <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-accent" /> Hovered</span>
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <span className="text-[10px] text-muted bg-background px-2 py-1 rounded border border-card-border font-mono whitespace-nowrap">
+            {graphNodes.length} files · {fi.traceSessionCount} trace sessions
+          </span>
+          {selectedFileId && (
+            <button
+              type="button"
+              onClick={() => onSelectFile(null)}
+              className="text-[10px] px-2 py-1 rounded-lg border border-card-border bg-background hover:border-accent/40 hover:text-accent transition-colors"
+            >
+              Clear selection
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="p-5 space-y-8">
+        {/* Legend */}
+        <div className="flex flex-wrap gap-x-5 gap-y-2 text-[10px] text-muted">
+          <span className="flex items-center gap-1.5">
+            <span className="w-8 h-2 rounded-sm bg-gradient-to-r from-emerald-500/70 to-emerald-400/40" /> Read-heavy
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-8 h-2 rounded-sm bg-gradient-to-r from-amber-500/70 to-amber-400/40" /> Write-heavy
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-8 h-2 rounded-sm bg-gradient-to-r from-violet-500/50 to-accent/50" /> Balanced
+          </span>
+        </div>
+
+        {/* Hotspots by directory */}
+        <section>
+          <div className="flex items-baseline justify-between gap-2 mb-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">Hotspots by top folder</h3>
+            <span className="text-[10px] text-muted">Larger tile = more agent touches in traced work</span>
+          </div>
+          <div className="space-y-5">
+            {fi.byDirectory.map((group) => (
+              <DirectoryHotspotBlock
+                key={group.dir}
+                group={group}
+                maxTouchesGlobal={maxTouchesGlobal}
+                selectedFileId={selectedFileId}
+                onSelectFile={onSelectFile}
+              />
+            ))}
+          </div>
+        </section>
+
+        <div className="h-px bg-card-border/80" />
+
+        {/* Co-modification pairs */}
+        <section>
+          <div className="flex items-baseline justify-between gap-2 mb-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">Often edited together</h3>
+            <span className="text-[10px] text-muted">Same trace session — useful for splitting or merging PRs</span>
+          </div>
+          {fi.topPairs.length === 0 ? (
+            <p className="text-xs text-muted py-2">Not enough overlapping files across sessions to show pairs.</p>
+          ) : (
+            <ul className="space-y-2">
+              {fi.topPairs.map((pair) => {
+                const barPct = (pair.weight / fi.maxPairWeight) * 100;
+                const involvesSelection =
+                  selectedFileId && (pair.a === selectedFileId || pair.b === selectedFileId);
+                return (
+                  <li
+                    key={`${pair.a}|||${pair.b}`}
+                    className={`rounded-lg border px-3 py-2.5 transition-colors ${
+                      involvesSelection
+                        ? "border-accent/50 bg-accent/5"
+                        : "border-card-border/80 bg-background/40 hover:border-card-border"
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-mono">
+                      <button
+                        type="button"
+                        onClick={() => onSelectFile(pair.a)}
+                        className="text-left text-foreground/90 hover:text-accent truncate max-w-[42%]"
+                        title={pair.a}
+                      >
+                        {pair.aName}
+                      </button>
+                      <span className="text-muted shrink-0">⟷</span>
+                      <button
+                        type="button"
+                        onClick={() => onSelectFile(pair.b)}
+                        className="text-left text-foreground/90 hover:text-accent truncate max-w-[42%]"
+                        title={pair.b}
+                      >
+                        {pair.bName}
+                      </button>
+                      <span className="ml-auto text-[10px] tabular-nums text-muted shrink-0">{pair.weight}×</span>
+                    </div>
+                    <div className="mt-2 h-1 rounded-full bg-card overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-violet-500/80 to-accent/70 transition-all duration-300"
+                        style={{ width: `${Math.max(barPct, 4)}%` }}
+                      />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+
+        <div className="h-px bg-card-border/80" />
+
+        {/* Session × file matrix */}
+        <section>
+          <div className="flex items-baseline justify-between gap-2 mb-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">File presence across sessions</h3>
+            <span className="text-[10px] text-muted">Recent traces, oldest → newest</span>
+          </div>
+          {fi.fileActivityTimeline.sessions.length === 0 || fi.fileActivityTimeline.rows.length === 0 ? (
+            <p className="text-xs text-muted py-2">No session timeline in this scope.</p>
+          ) : (
+            <FileSessionMatrix
+              timeline={fi.fileActivityTimeline}
+              selectedFileId={selectedFileId}
+              onSelectFile={onSelectFile}
+            />
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function rwHue(node: FileNode): string {
+  const t = node.reads + node.writes;
+  if (t === 0) return "from-slate-500/50 to-slate-600/30";
+  const w = node.writes / t;
+  if (w >= 0.55) return "from-amber-500/75 to-amber-600/40";
+  if (w <= 0.35) return "from-emerald-500/75 to-emerald-700/45";
+  return "from-violet-500/60 to-accent/55";
+}
+
+function DirectoryHotspotBlock({
+  group,
+  maxTouchesGlobal,
+  selectedFileId,
+  onSelectFile,
+}: {
+  group: DirectoryGroup;
+  maxTouchesGlobal: number;
+  selectedFileId: string | null;
+  onSelectFile: (id: string | null) => void;
+}) {
+  const maxLocal = Math.max(...group.files.map((f) => f.touches), 1);
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <span className="text-[12px] font-medium font-mono text-foreground/90 truncate" title={group.dir}>
+          {group.dir}
+        </span>
+        <span className="text-[10px] text-muted tabular-nums shrink-0">
+          {group.fileCount} files · {group.totalTouches} touches
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {group.files.map((f) => {
+          const flexGrow = Math.max(1, Math.round((f.touches / maxLocal) * 14));
+          const selected = selectedFileId === f.id;
+          return (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => onSelectFile(selected ? null : f.id)}
+              style={{ flex: `${flexGrow} 1 104px` }}
+              className={[
+                "min-h-[52px] rounded-lg border text-left px-2.5 py-2 transition-all duration-200",
+                "bg-gradient-to-br shadow-sm",
+                rwHue(f),
+                selected
+                  ? "border-accent ring-2 ring-accent/40 scale-[1.02] z-10"
+                  : "border-white/5 hover:border-accent/35 hover:brightness-110",
+              ].join(" ")}
+              title={`${f.id}\n${f.reads} reads · ${f.writes} writes · ${f.sessions} sessions`}
+            >
+              <div className="text-[11px] font-mono font-medium text-white/95 leading-tight line-clamp-2 break-all">
+                {f.name}
+              </div>
+              <div className="mt-1 flex items-center justify-between text-[9px] text-white/75 font-mono tabular-nums">
+                <span>{f.touches} touches</span>
+                <span className="opacity-80">{Math.round((f.touches / maxTouchesGlobal) * 100)}% max</span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function FileSessionMatrix({
+  timeline,
+  selectedFileId,
+  onSelectFile,
+}: {
+  timeline: FileActivityTimeline;
+  selectedFileId: string | null;
+  onSelectFile: (id: string | null) => void;
+}) {
+  const colCount = timeline.sessions.length;
+  return (
+    <div className="rounded-lg border border-card-border/80 bg-background/30 overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-[10px] min-w-[520px]">
+          <thead>
+            <tr className="bg-background/80">
+              <th className="sticky left-0 z-20 bg-background/95 backdrop-blur-sm border-b border-r border-card-border px-2 py-2 text-left font-medium text-muted w-[min(32vw,200px)]">
+                File
+              </th>
+              {timeline.sessions.map((s, i) => (
+                <th
+                  key={s.id}
+                  className="border-b border-card-border px-0.5 py-2 text-center font-normal text-muted align-bottom min-w-[22px] max-w-[28px]"
+                  title={`${s.label}\n${s.started_at || ""}`}
+                >
+                  <span className="inline-block rotate-[-68deg] origin-bottom translate-y-1 max-h-[72px] whitespace-nowrap">
+                    {i + 1}
+                  </span>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {timeline.rows.map((row) => {
+              const sel = selectedFileId === row.fileId;
+              return (
+                <tr key={row.fileId} className={sel ? "bg-accent/8" : undefined}>
+                  <td
+                    className={`sticky left-0 z-10 border-r border-card-border/80 px-2 py-1 ${sel ? "bg-accent/8" : "bg-background"}`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => onSelectFile(sel ? null : row.fileId)}
+                      className="text-left font-mono text-[10px] text-foreground/90 hover:text-accent truncate max-w-[200px] block w-full"
+                      title={row.fileId}
+                    >
+                      {row.fileName}
+                    </button>
+                  </td>
+                  {row.touched.map((hit, idx) => (
+                    <td key={`${row.fileId}-${idx}`} className="p-0 border-b border-card-border/40 text-center align-middle">
+                      <div
+                        className={[
+                          "mx-auto h-5 w-4 rounded-sm transition-colors duration-200",
+                          hit
+                            ? "bg-gradient-to-b from-accent/90 to-violet-600/70 shadow-[0_0_12px_rgba(99,102,241,0.25)]"
+                            : "bg-card/40",
+                          sel && hit ? "ring-1 ring-white/30" : "",
+                        ].join(" ")}
+                        title={
+                          hit
+                            ? `Touched in session ${timeline.sessions[idx]?.label || ""}`
+                            : "Not in this session"
+                        }
+                      />
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="flex flex-wrap items-center gap-3 px-3 py-2 border-t border-card-border/80 text-[10px] text-muted bg-background/50">
+        <span>
+          Columns are trace sessions ({colCount}) — hover headers for task text. Dense dots = that file keeps reappearing.
+        </span>
       </div>
     </div>
   );
@@ -438,7 +631,6 @@ function ProjectBar({ project, rank, maxLines }: { project: TopProject; rank: nu
 }
 
 function HotSessionCard({ session }: { session: HotSession }) {
-  const totalImpact = session.linesAdded + session.linesRemoved;
   return (
     <div className="p-3 rounded-lg border border-card-border bg-background/50 hover:border-accent/30 transition-colors">
       <h4 className="text-xs font-medium leading-snug line-clamp-2 mb-2">{session.name}</h4>
@@ -459,26 +651,6 @@ function HotSessionCard({ session }: { session: HotSession }) {
           />
         </div>
       )}
-    </div>
-  );
-}
-
-function FileChip({ node, maxTouches }: { node: FileNode; maxTouches: number }) {
-  const intensity = node.touches / maxTouches;
-  const isWriteHeavy = node.writes > node.reads;
-
-  return (
-    <div
-      className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-mono transition-colors ${
-        isWriteHeavy
-          ? "border-running/30 bg-running/8 hover:bg-running/15"
-          : "border-emerald-500/30 bg-emerald-500/8 hover:bg-emerald-500/15"
-      }`}
-      style={{ opacity: 0.4 + intensity * 0.6 }}
-      title={`${node.id}\n${node.reads} reads, ${node.writes} writes, ${node.sessions} sessions`}
-    >
-      <span className="text-foreground/80">{node.name}</span>
-      <span className="ml-1.5 text-muted">{node.touches}x</span>
     </div>
   );
 }

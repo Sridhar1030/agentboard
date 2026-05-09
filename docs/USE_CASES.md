@@ -47,9 +47,19 @@ You instantly understand the *why* behind every change.
 
 ---
 
+### 4. "Walk the DAG" when reasoning looks wrong
+
+**Scenario:** An agent produced a surprising refactor. Plain chat shows *what* it said, not the full order of decisions.
+
+**With AgentBoard:** Open **Trace Explorer** (`/traces`) or the **Traces** tab on a session — the decision **DAG** lays out each step as a node with parent/child links. Follow branches where the model chose a different path, see which files were read before a write, and align timestamps with the transcript. Same graph appears when you link from a kanban session into a related trace.
+
+**Outcome:** You debug *reasoning structure* (missed steps, wrong fork, noisy backtracking), not just final diffs — similar to stepping through a program's control flow.
+
+---
+
 ## For Tech Leads / Managers
 
-### 4. Measuring AI Adoption Impact
+### 5. Measuring AI Adoption Impact
 
 **Scenario:** Leadership asks "How much value are we getting from AI coding tools?"
 
@@ -63,7 +73,7 @@ You instantly understand the *why* behind every change.
 
 ---
 
-### 5. Code Review of Agent-Generated PRs
+### 6. Code Review of Agent-Generated PRs
 
 **Scenario:** A PR shows 600 lines changed across 12 files. It was agent-generated.
 
@@ -79,7 +89,7 @@ Review time drops from 45 minutes to 10 minutes.
 
 ---
 
-### 6. Onboarding New Team Members
+### 7. Onboarding New Team Members
 
 **Scenario:** New hire needs to understand how a complex feature was built.
 
@@ -91,7 +101,7 @@ Review time drops from 45 minutes to 10 minutes.
 
 ## For Platform / DevEx Teams
 
-### 7. Understanding Agent Patterns Across the Org
+### 8. Understanding Agent Patterns Across the Org
 
 **Scenario:** DevEx team wants to improve developer productivity with AI tools.
 
@@ -103,7 +113,7 @@ Review time drops from 45 minutes to 10 minutes.
 
 ---
 
-### 8. Debugging MCP Tool Integrations
+### 9. Debugging MCP Tool Integrations
 
 **Scenario:** A custom MCP tool isn't working as expected during agent sessions.
 
@@ -113,7 +123,7 @@ Review time drops from 45 minutes to 10 minutes.
 
 ## For Compliance / Security
 
-### 9. Audit Trail for AI-Generated Code
+### 10. Audit Trail for AI-Generated Code
 
 **Scenario:** Regulated industry requires traceability for code changes.
 
@@ -134,6 +144,7 @@ This creates a defensible record of AI-assisted development.
 
 | Use Case | Persona | Key Benefit |
 |---|---|---|
+| DAG reasoning debug | Developer | See decision order and branches, not only the diff |
 | Understand agent changes | Developer | Save 30+ min of manual investigation |
 | Find regression source | Developer | Pinpoint exact session that broke things |
 | Monitor context usage | Developer | Prevent quality degradation |
