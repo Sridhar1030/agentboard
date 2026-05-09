@@ -47,6 +47,7 @@ export default function Home() {
   const [showArchived, setShowArchived] = useState(false);
   const [traceCount, setTraceCount] = useState(0);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [workspace, setWorkspace] = useState<string>("all");
 
   useEffect(() => {
     const saved = localStorage.getItem("agentboard-theme");
@@ -117,8 +118,11 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [fetchAgents, fetchTraces]);
 
+  const workspaces = Array.from(new Set(agents.map((a) => a.project).filter(Boolean))).sort();
+
   const filtered = agents.filter((a) => {
     if (!showArchived && a.isArchived) return false;
+    if (workspace !== "all" && a.project !== workspace) return false;
     if (!search) return true;
     const q = search.toLowerCase();
     return (
@@ -156,6 +160,16 @@ export default function Home() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          <Link
+            href="/insights"
+            className="flex items-center gap-1.5 text-xs text-muted hover:text-accent transition-colors px-3 py-2 rounded-lg hover:bg-card border border-transparent hover:border-card-border"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2" />
+            </svg>
+            Insights
+          </Link>
           <Link
             href="/traces"
             className="flex items-center gap-1.5 text-xs text-muted hover:text-accent transition-colors px-3 py-2 rounded-lg hover:bg-card border border-transparent hover:border-card-border"
@@ -195,6 +209,17 @@ export default function Home() {
             />
             Archived
           </label>
+          <select
+            value={workspace}
+            onChange={(e) => setWorkspace(e.target.value)}
+            className="bg-card border border-card-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:border-accent transition-colors appearance-none cursor-pointer max-w-[160px]"
+            title="Filter by workspace"
+          >
+            <option value="all">All Workspaces</option>
+            {workspaces.map((ws) => (
+              <option key={ws} value={ws}>{ws}</option>
+            ))}
+          </select>
           <div className="relative">
             <svg
               className="absolute left-3 top-1/2 -translate-y-1/2 text-muted"
@@ -226,7 +251,7 @@ export default function Home() {
         </div>
       </header>
 
-      {!loading && <StatsBanner agents={filtered} traceCount={traceCount} />}
+      {!loading && <StatsBanner agents={filtered} traceCount={traceCount} totalAgents={total} />}
 
       {error && (
         <div className="mx-6 mt-4 p-3 bg-error/10 border border-error/20 rounded-lg text-sm text-error shrink-0">

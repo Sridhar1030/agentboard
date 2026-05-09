@@ -1,0 +1,24 @@
+{
+  "session": {
+    "session_id": "3d35e1fa",
+    "slug": "build_interactive_file_relationship_graph",
+    "task": "Build interactive file relationship graph, codebase impact treemap, cross-session analytics, and session diff view to differentiate from basic chat viewer",
+    "started_at": "2026-05-09T15:33:06Z",
+    "ended_at": null,
+    "outcome": null,
+    "repo_snapshot": [
+      "src/app/insights/page.tsx",
+      "src/app/api/insights/route.ts",
+      "src/lib/agents.ts",
+      "src/app/page.tsx"
+    ],
+    "cursor_stats": {
+      "model": null,
+      "tool_call_count": 0,
+      "tokens_in": null,
+      "tokens_out": null,
+      "cost_usd": null
+    }
+  },
+  "events": []
+}
