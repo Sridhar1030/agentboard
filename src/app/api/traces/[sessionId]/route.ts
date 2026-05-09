@@ -1,35 +1,82 @@
-import { readFile } from "fs/promises";
+import { readFile, readdir } from "fs/promises";
 import { join } from "path";
-import { NextRequest, NextResponse } from "next/server";
-import { readdir } from "fs/promises";
+import { NextResponse, type NextRequest } from "next/server";
+import { normalizeTraceEnvelope } from "@/lib/traceDagNormalize";
+import { sanitizeWorkspaceQueryParam, tracesDirForListing } from "@/lib/tracePaths";
 
 export const dynamic = "force-dynamic";
 
-const TRACES_DIR = join(process.cwd(), ".cursor", "traces");
+async function loadTraceEnvelopeFromTracesDir(
+  tracesDir: string,
+  sessionId: string
+): Promise<Record<string, unknown> | null> {
+  let dateDirs: string[];
+  try {
+    dateDirs = await readdir(tracesDir);
+  } catch {
+    return null;
+  }
+  for (const dateDir of dateDirs) {
+    if (dateDir.startsWith(".")) continue;
+    const datePath = join(tracesDir, dateDir);
+    let sessionDirs: string[];
+    try {
+      sessionDirs = await readdir(datePath);
+    } catch {
+      continue;
+    }
+    if (!sessionDirs.includes(sessionId)) continue;
+    const sessionPath = join(datePath, sessionId);
+    let files: string[];
+    try {
+      files = await readdir(sessionPath);
+    } catch {
+      continue;
+    }
+    const jsonFile = files.find((f) => f.endsWith(".json"));
+    if (!jsonFile) continue;
+    try {
+      const raw = await readFile(join(sessionPath, jsonFile), "utf-8");
+      return JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+/**
+ * Query workspace first (validated), then the AgentBoard cwd — so deep links still resolve when
+ * a session folder id lives under the dashboard project.
+ */
+function tracesSearchDirectories(validatedWs: string | null): string[] {
+  const dirs: string[] = [];
+  if (validatedWs) dirs.push(tracesDirForListing(validatedWs));
+  const cwdRoot = tracesDirForListing(null);
+  if (!dirs.includes(cwdRoot)) dirs.push(cwdRoot);
+  return dirs;
+}
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ sessionId: string }> }
 ) {
   const { sessionId } = await params;
+  const workspaceRaw = req.nextUrl.searchParams.get("workspace");
+  const validatedWs = sanitizeWorkspaceQueryParam(workspaceRaw);
+
+  if (workspaceRaw?.trim().length && !validatedWs) {
+    return NextResponse.json({ error: "Invalid or disallowed workspace path" }, { status: 400 });
+  }
 
   try {
-    const dateDirs = await readdir(TRACES_DIR);
-    for (const dateDir of dateDirs) {
-      const datePath = join(TRACES_DIR, dateDir);
-      let sessionDirs: string[];
-      try {
-        sessionDirs = await readdir(datePath).then((entries) => entries);
-      } catch {
-        continue;
-      }
-      if (sessionDirs.includes(sessionId)) {
-        const sessionPath = join(datePath, sessionId);
-        const files = await readdir(sessionPath);
-        const jsonFile = files.find((f) => f.endsWith(".json"));
-        if (!jsonFile) continue;
-        const content = await readFile(join(sessionPath, jsonFile), "utf-8");
-        return NextResponse.json(JSON.parse(content));
+    const searchDirs = tracesSearchDirectories(validatedWs);
+
+    for (const tracesDir of searchDirs) {
+      const parsed = await loadTraceEnvelopeFromTracesDir(tracesDir, sessionId);
+      if (parsed) {
+        const events = normalizeTraceEnvelope(parsed, sessionId);
+        return NextResponse.json({ ...parsed, events });
       }
     }
     return NextResponse.json({ error: "Trace not found" }, { status: 404 });

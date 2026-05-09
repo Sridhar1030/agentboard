@@ -10,18 +10,9 @@ import {
   type KeyboardEvent,
 } from "react";
 
-export interface DagTraceEvent {
-  step_id: string;
-  parent_step_id: string | null;
-  type: string;
-  timestamp: string;
-  reason: string;
-  files_read: string[];
-  files_modified: string[];
-  files_created: string[];
-  files_deleted: string[];
-  notes?: string;
-}
+import { sanitizeTraceLinkage, type DagTraceEvent } from "@/lib/traceDagNormalize";
+
+export type { DagTraceEvent };
 
 const NODE_W = 260;
 const NODE_H = 96;
@@ -205,11 +196,12 @@ function TraceDagSvgInner({ events, sessionId, expandedStep, onToggle, className
   const mountFit = useRef(true);
 
   const { root, width, height, edges, nodes } = useMemo(() => {
-    if (events.length === 0) {
+    const normalized = sanitizeTraceLinkage(events, sessionId);
+    if (normalized.length === 0) {
       return { root: null as Placed | null, width: 400, height: 200, edges: [] as [string, string][], nodes: [] as Placed[] };
     }
 
-    const tree = buildTree(events, sessionId);
+    const tree = buildTree(normalized, sessionId);
     if (tree.children.length === 0) {
       return { root: null, width: 400, height: 200, edges: [], nodes: [] };
     }
@@ -289,7 +281,7 @@ function TraceDagSvgInner({ events, sessionId, expandedStep, onToggle, className
     return () => ro.disconnect();
   }, [fitDone, tryFit, sessionId]);
 
-  if (!root || events.length === 0) {
+  if (!root) {
     return (
       <div
         className={`rounded-xl border border-card-border bg-card/30 px-4 py-8 text-center text-sm text-muted ${className}`}

@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { TraceDagSvg } from "@/components/TraceDagSvg";
+
+const CODED_AGENT_PREFIX = "/Users/srpillai/CODING/";
 
 interface TraceSession {
   session_id: string;
@@ -81,41 +83,114 @@ function formatTraceTimeOnly(iso: string): string {
 }
 
 export default function TracesPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="flex h-[100dvh] flex-col items-center justify-center overflow-hidden bg-background">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+        </main>
+      }
+    >
+      <TracesExplorer />
+    </Suspense>
+  );
+}
+
+function shortenWorkspaceLabel(abs: string): string {
+  return abs.replace(/^\/Users\/[^/]+/, "~");
+}
+
+function TracesExplorer() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const workspaceParam = searchParams.get("workspace");
+  /** Agent-derived roots under CODED_AGENT_PREFIX — only used for the dropdown; never brute-forces the filesystem. */
+  const [knownWorkspacesFromAgents, setKnownWorkspacesFromAgents] = useState<string[]>([]);
+
   const [sessions, setSessions] = useState<TraceSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTrace, setSelectedTrace] = useState<TraceDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
 
+  const tracesQuerySuffix = workspaceParam ?
+    `?workspace=${encodeURIComponent(workspaceParam)}`
+  : "";
+
   useEffect(() => {
-    fetch("/api/traces")
+    void fetch("/api/agents?limit=200&offset=0")
       .then((r) => r.json())
-      .then((d) => {
+      .then((d: { agents?: { workspace?: string }[] }) => {
+        const seen = new Set<string>();
+        for (const a of d.agents || []) {
+          const w = typeof a.workspace === "string" ? a.workspace.trim() : "";
+          if (w.startsWith(CODED_AGENT_PREFIX)) seen.add(w);
+        }
+        setKnownWorkspacesFromAgents([...seen].sort());
+      })
+      .catch(() => setKnownWorkspacesFromAgents([]));
+  }, []);
+
+  const workspaceChoices = useMemo(() => {
+    const s = new Set(knownWorkspacesFromAgents);
+    if (workspaceParam && workspaceParam.startsWith(CODED_AGENT_PREFIX)) {
+      s.add(workspaceParam);
+    }
+    return [...s].sort();
+  }, [knownWorkspacesFromAgents, workspaceParam]);
+
+  const showWorkspaceChooser = workspaceChoices.length >= 2 || workspaceParam !== null;
+
+  const workspaceSelectValue = workspaceParam ?? "";
+
+  const onWorkspacePick = useCallback(
+    (value: string) => {
+      const qp = new URLSearchParams();
+      if (value) qp.set("workspace", value);
+      const qs = qp.toString();
+      setSelectedTrace(null);
+      router.replace(qs ? `/traces?${qs}` : "/traces", { scroll: false });
+    },
+    [router]
+  );
+
+  useEffect(() => {
+    queueMicrotask(() => setLoading(true));
+    fetch(`/api/traces${tracesQuerySuffix}`)
+      .then((r) => r.json())
+      .then((d: { sessions?: TraceSession[]; error?: string }) => {
+        if (typeof d.error === "string") {
+          setSessions([]);
+          return;
+        }
         const list = (d.sessions || []) as TraceSession[];
         list.sort((a, b) => parseTraceInstant(b.started_at).getTime() - parseTraceInstant(a.started_at).getTime());
         setSessions(list);
       })
+      .catch(() => setSessions([]))
       .finally(() => setLoading(false));
-  }, []);
+  }, [tracesQuerySuffix]);
 
   const openTrace = useCallback(
     async (sessionId: string) => {
       setLoadingDetail(true);
       try {
-        const res = await fetch(`/api/traces/${sessionId}`);
+        const res = await fetch(`/api/traces/${sessionId}${tracesQuerySuffix}`);
         const data = await res.json();
         if (!data.error) {
           setSelectedTrace(data);
-          router.replace(`/traces?session=${encodeURIComponent(sessionId)}`, { scroll: false });
+          const qp = new URLSearchParams();
+          qp.set("session", sessionId);
+          if (workspaceParam) qp.set("workspace", workspaceParam);
+          router.replace(`/traces?${qp.toString()}`, { scroll: false });
         }
       } finally {
         setLoadingDetail(false);
       }
     },
-    [router]
+    [router, tracesQuerySuffix, workspaceParam]
   );
 
-  /** Deep-link ?session= from Trace Explorer or agent panel. */
+  /** Deep-link ?session= from Trace Explorer or agent panel (when list already contains that session). */
   useEffect(() => {
     if (loading || sessions.length === 0) return;
     const id = new URLSearchParams(window.location.search).get("session");
@@ -127,8 +202,8 @@ export default function TracesPage() {
 
   return (
     <main className="flex h-[100dvh] flex-col overflow-hidden min-h-0">
-      <header className="border-b border-card-border px-6 py-4 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-3">
+      <header className="border-b border-card-border px-6 py-4 flex flex-wrap items-center justify-between shrink-0 gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <Link href="/" className="text-muted hover:text-foreground transition-colors">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M19 12H5M12 19l-7-7 7-7" />
@@ -143,6 +218,24 @@ export default function TracesPage() {
             <h1 className="text-lg font-semibold tracking-tight">Trace Explorer</h1>
             <p className="text-xs text-muted">{sessions.length} reasoning traces captured</p>
           </div>
+          {showWorkspaceChooser && (
+            <label className="ml-2 flex items-center gap-2 text-[11px] text-muted">
+              <span className="uppercase tracking-wider">Workspace</span>
+              <select
+                aria-label="Trace workspace folder"
+                value={workspaceSelectValue}
+                onChange={(e) => onWorkspacePick(e.target.value)}
+                className="max-w-[min(28rem,calc(100vw-14rem))] rounded-lg border border-card-border bg-background px-2 py-1.5 font-mono text-[11px] text-foreground focus:border-accent focus:outline-none"
+              >
+                <option value="">This app (dashboard cwd)</option>
+                {workspaceChoices.map((w) => (
+                  <option key={w} value={w}>
+                    {shortenWorkspaceLabel(w)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
       </header>
 

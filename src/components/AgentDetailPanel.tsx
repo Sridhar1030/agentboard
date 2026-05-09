@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { AgentInfo, ConversationEntry } from "@/app/page";
 import { TraceView } from "@/components/TraceView";
 import { parseTraceInstant, traceRelatesToAgent, type TraceSessionRow } from "@/lib/agentTraceMatch";
+import { agentTraceWorkspaceRoot } from "@/lib/tracePaths";
 
 interface AgentDetailPanelProps {
   agentId: string;
@@ -54,14 +55,24 @@ export function AgentDetailPanel({ agentId, onClose }: AgentDetailPanelProps) {
     queueMicrotask(() => setPanelTab("transcript"));
   }, [agentId]);
 
+  const traceWorkspaceForApi = useMemo(
+    () => (data?.agent ? agentTraceWorkspaceRoot(data.agent) : null),
+    [data]
+  );
+
   useEffect(() => {
+    if (loading || !data?.agent) return;
     queueMicrotask(() => setTracesLoading(true));
-    fetch("/api/traces")
+    const qs =
+      traceWorkspaceForApi ?
+        `?workspace=${encodeURIComponent(traceWorkspaceForApi)}`
+      : "";
+    void fetch(`/api/traces${qs}`)
       .then((r) => r.json())
       .then((d) => setTraceSessions((d.sessions || []) as TraceSession[]))
       .catch(() => setTraceSessions([]))
       .finally(() => setTracesLoading(false));
-  }, [agentId]);
+  }, [agentId, loading, traceWorkspaceForApi, data?.agent]);
 
   const relatedTraces = useMemo(() => {
     if (!data?.agent) return [];

@@ -7,8 +7,10 @@ import type { AgentInfo, ConversationEntry } from "@/app/page";
 import { COACH_ANALYSIS_USER_WINDOW } from "@/lib/promptCoachConstants";
 import type { CoachApiResponse, CoachGrade } from "@/lib/promptCoach";
 import { TraceView } from "@/components/TraceView";
-import { TraceDagSvg, type DagTraceEvent } from "@/components/TraceDagSvg";
+import { TraceDagSvg } from "@/components/TraceDagSvg";
+import type { DagTraceEvent } from "@/lib/traceDagNormalize";
 import { parseTraceInstant, traceRelatesToAgent, type TraceSessionRow } from "@/lib/agentTraceMatch";
+import { agentTraceWorkspaceRoot } from "@/lib/tracePaths";
 
 const PAGE_SIZE = 50;
 
@@ -53,6 +55,8 @@ function AgentSessionContent({
 
   const [traceSessions, setTraceSessions] = useState<TraceSessionRow[]>([]);
   const [dagSessionId, setDagSessionId] = useState<string | null>(null);
+  /** `session.session_id` from loaded JSON (parent_step_id may reference this, not the filesystem folder id). */
+  const [dagLinkageSessionId, setDagLinkageSessionId] = useState<string | null>(null);
   const [dagEvents, setDagEvents] = useState<DagTraceEvent[]>([]);
   const [dagLoading, setDagLoading] = useState(false);
   const [dagStepFocus, setDagStepFocus] = useState<string | null>(null);
@@ -111,12 +115,33 @@ function AgentSessionContent({
     queueMicrotask(() => void fetchCoach(false));
   }, [tab, agentId, coach, coachErr, coachLoading, fetchCoach]);
 
+  const traceWorkspaceParam = useMemo(
+    () => (data?.agent ? agentTraceWorkspaceRoot(data.agent) : null),
+    [data]
+  );
+
   useEffect(() => {
-    fetch("/api/traces")
-      .then((r) => r.json())
-      .then((d) => setTraceSessions((d.sessions || []) as TraceSessionRow[]))
-      .catch(() => setTraceSessions([]));
-  }, [agentId]);
+    if (loading || !data?.agent) return;
+    void (async () => {
+      const qs = traceWorkspaceParam
+        ? `?workspace=${encodeURIComponent(traceWorkspaceParam)}`
+        : "";
+      try {
+        const res = await fetch(`/api/traces${qs}`);
+        const d = (await res.json()) as {
+          sessions?: TraceSessionRow[];
+          error?: string;
+        };
+        if (typeof d.error === "string") {
+          setTraceSessions([]);
+          return;
+        }
+        setTraceSessions((d.sessions || []) as TraceSessionRow[]);
+      } catch {
+        setTraceSessions([]);
+      }
+    })();
+  }, [loading, traceWorkspaceParam, data?.agent]);
 
   const relatedTraces = useMemo(() => {
     if (!data?.agent) return [];
@@ -153,17 +178,33 @@ function AgentSessionContent({
   const loadDag = useCallback(async (sessionId: string) => {
     setDagLoading(true);
     setDagStepFocus(null);
+    setDagLinkageSessionId(sessionId);
     try {
-      const res = await fetch(`/api/traces/${sessionId}`);
-      const d = await res.json();
-      if (!d.error && d.events) setDagEvents(d.events as DagTraceEvent[]);
-      else setDagEvents([]);
+      const qs = traceWorkspaceParam
+        ? `?workspace=${encodeURIComponent(traceWorkspaceParam)}`
+        : "";
+      const res = await fetch(`/api/traces/${sessionId}${qs}`);
+      const d = (await res.json()) as {
+        error?: string;
+        session?: { session_id?: string };
+        events?: DagTraceEvent[];
+      };
+      if (!d.error && Array.isArray(d.events)) {
+        setDagEvents(d.events);
+        const sidFromFile =
+          typeof d.session?.session_id === "string" && d.session.session_id.length > 0 ? d.session.session_id : null;
+        setDagLinkageSessionId(sidFromFile ?? sessionId);
+      } else {
+        setDagEvents([]);
+        setDagLinkageSessionId(sessionId);
+      }
     } catch {
       setDagEvents([]);
+      setDagLinkageSessionId(sessionId);
     } finally {
       setDagLoading(false);
     }
-  }, []);
+  }, [traceWorkspaceParam]);
 
   useEffect(() => {
     if (tab !== "dag" || !dagSessionId) return;
@@ -338,7 +379,7 @@ function AgentSessionContent({
                           </select>
                           {dagSessionId && (
                             <Link
-                              href={`/traces?session=${encodeURIComponent(dagSessionId)}`}
+                              href={`/traces?session=${encodeURIComponent(dagSessionId)}${traceWorkspaceParam ? `&workspace=${encodeURIComponent(traceWorkspaceParam)}` : ""}`}
                               className="shrink-0 rounded-lg border border-card-border px-3 py-2 text-xs font-medium text-muted transition hover:border-accent hover:text-accent"
                             >
                               Open in traces
@@ -353,7 +394,7 @@ function AgentSessionContent({
                           <TraceDagSvg
                             className="min-h-[480px] flex-1"
                             events={dagEvents}
-                            sessionId={dagSessionId}
+                            sessionId={dagLinkageSessionId ?? dagSessionId ?? ""}
                             expandedStep={dagStepFocus}
                             onToggle={setDagStepFocus}
                           />

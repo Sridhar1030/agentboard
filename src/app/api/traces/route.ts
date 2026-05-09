@@ -1,17 +1,28 @@
-import { NextResponse } from "next/server";
+import { resolve } from "path";
+import { NextResponse, type NextRequest } from "next/server";
+import { sanitizeWorkspaceQueryParam, tracesDirForListing } from "@/lib/tracePaths";
+import { sessionsFromDisk } from "@/lib/tracesDiskListing";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const workspaceRaw = req.nextUrl.searchParams.get("workspace");
+  const validatedWs = sanitizeWorkspaceQueryParam(workspaceRaw);
+
+  if (workspaceRaw?.trim().length && !validatedWs) {
+    return NextResponse.json(
+      { error: "Invalid or disallowed workspace path", sessions: [], total: 0 },
+      { status: 400 }
+    );
+  }
+
   try {
-    const res = await fetch("http://127.0.0.1:8080/sessions", {
-      cache: "no-store",
+    const tracesDir = tracesDirForListing(validatedWs);
+    const inferredWs = validatedWs ?? resolve(process.cwd());
+    const sessions = await sessionsFromDisk(tracesDir, {
+      inferredWorkspaceFallback: inferredWs,
     });
-    if (!res.ok) {
-      return NextResponse.json({ sessions: [], total: 0 });
-    }
-    const data = await res.json();
-    return NextResponse.json(data);
+    return NextResponse.json({ sessions, total: sessions.length });
   } catch {
     return NextResponse.json({ sessions: [], total: 0 });
   }

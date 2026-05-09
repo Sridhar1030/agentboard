@@ -1,4 +1,5 @@
 import type { AgentInfo } from "@/app/page";
+import { agentTraceWorkspaceRoot } from "@/lib/tracePaths";
 
 /** Trace session list row shape from `/api/traces`. */
 export interface TraceSessionRow {
@@ -127,16 +128,28 @@ function normalizeWorkspacePath(p: string): string {
   return p.trim().replace(/\\/g, "/").replace(/\/+$/g, "").toLowerCase();
 }
 
-/** True when the trace workspace string aligns with the agent's project or workspace path. */
+/** True when the trace workspace string aligns with the agent's disk root and related path metadata. */
 function workspaceMatchesAgent(traceWorkspace: string, agent: AgentInfo): boolean {
   const tw = normalizeWorkspacePath(traceWorkspace);
   if (!tw) return false;
-  const paths = [agent.workspace, agent.projectPath].filter(
-    (x): x is string => typeof x === "string" && x.trim().length > 0
-  );
+
+  const primaryRoot = agentTraceWorkspaceRoot(agent);
+  const paths: string[] = [];
+  if (primaryRoot) paths.push(primaryRoot);
+
+  const w = (agent.workspace || "").trim();
+  if (w) paths.push(w);
+
+  const pp = (agent.projectPath || "").trim();
+  if (pp.startsWith("/")) paths.push(pp);
+
+  const seen = new Set<string>();
   for (const ap of paths) {
-    const nw = normalizeWorkspacePath(ap);
-    if (!nw) continue;
+    const key = normalizeWorkspacePath(ap);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+
+    const nw = key;
     if (tw === nw) return true;
     if (tw.startsWith(`${nw}/`) || nw.startsWith(`${tw}/`)) return true;
     const bt = tw.split("/").filter(Boolean).pop() ?? "";
@@ -201,10 +214,8 @@ export function traceRelatesToAgent(trace: TraceSessionRow, agent: AgentInfo): b
     (task.includes(agent.project.toLowerCase()) || task.replace(/\s/g, "").includes(projSlug));
 
   const traceWorkspace = trace.workspace?.trim();
-  if (traceWorkspace) {
-    if (!workspaceMatchesAgent(traceWorkspace, agent)) {
-      return false;
-    }
+  if (traceWorkspace && !workspaceMatchesAgent(traceWorkspace, agent)) {
+    return false;
   }
 
   const auxiliaryMatch =
@@ -215,10 +226,6 @@ export function traceRelatesToAgent(trace: TraceSessionRow, agent: AgentInfo): b
     traceTaskMentionsThisAppSurfaces(trace.task || "") ||
     significantWordOverlap(trace.task || "", agent);
 
-  // Time overlap alone is too broad (many agents active in the same window). Require at least one
-  // of: path/task hint, agent title words, subtitle, or project name in the trace task — and overlap
-  // the agent's active window. When `trace.workspace` is set, mismatched projects are excluded above;
-  // for the same repo, concurrent agents still need a textual/project signal, not just timing.
   if (!timeOverlap || !auxiliaryMatch) {
     return false;
   }
