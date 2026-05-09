@@ -1,0 +1,15 @@
+---
+description: Cursor session tracing — auto-trace reasoning chains for multi-file tasks
+globs: "**/*"
+alwaysApply: true
+---
+
+# Session Tracing
+
+When performing a multi-file task (touching 2+ files), use the `cursor-session-tracer` MCP tools:
+
+1. **start_trace** — Call at the beginning with a task description and list of files in scope. Store the returned `session_id`.
+2. **append_trace** — Call before each significant decision (reading a file to understand structure, choosing an implementation approach, modifying a dependent file). Pass the previous `step_id` as `parent_step_id`.
+3. **end_trace** — Call when the task is complete or you are stopping. Pass outcome as `completed`, `partial`, or `aborted`.
+
+The trace builds a directed graph of your reasoning chain, making it possible to debug regressions by walking the trace instead of staring at a diff.

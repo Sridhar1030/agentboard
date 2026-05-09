@@ -1,0 +1,104 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0f0f13;
+  --foreground: #e4e4e7;
+  --card: #1a1a22;
+  --card-border: #2a2a35;
+  --accent: #6366f1;
+  --accent-hover: #818cf8;
+  --running: #f59e0b;
+  --finished: #10b981;
+  --error: #ef4444;
+  --muted: #71717a;
+}
+
+.light {
+  --background: #f8f9fb;
+  --foreground: #1a1a2e;
+  --card: #ffffff;
+  --card-border: #e2e4ea;
+  --accent: #4f46e5;
+  --accent-hover: #6366f1;
+  --running: #d97706;
+  --finished: #059669;
+  --error: #dc2626;
+  --muted: #6b7280;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-border: var(--card-border);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-running: var(--running);
+  --color-finished: var(--finished);
+  --color-error: var(--error);
+  --color-muted: var(--muted);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.pulse-dot {
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.slide-up {
+  animation: slide-up 0.2s ease-out;
+}
+
+@keyframes trace-step-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.trace-step-enter {
+  opacity: 0;
+  animation: trace-step-enter 0.42s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.trace-card-glow {
+  transition:
+    box-shadow 0.35s ease,
+    border-color 0.28s ease,
+    transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.trace-card-glow:hover {
+  border-color: rgba(99, 102, 241, 0.35);
+  box-shadow:
+    0 0 0 1px rgba(99, 102, 241, 0.1),
+    0 16px 48px -22px rgba(0, 0, 0, 0.55);
+  transform: translateY(-1px);
+}
+
+.light .trace-card-glow:hover {
+  box-shadow:
+    0 0 0 1px rgba(79, 70, 229, 0.12),
+    0 12px 32px -12px rgba(0, 0, 0, 0.12);
+}
